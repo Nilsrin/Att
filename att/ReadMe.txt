@@ -1,0 +1,101 @@
+Attendance addon for FFXI
+
+This addon works using the link list found under the linkshell menu. This is done so that it does not truncate over a certain number of people. 
+
+It is primarily used to run attendance for certain events. For example, /att ls e faf would run attendance for fafnir. 
+
+/att will run a basic mode
+/att ls will run a linklist mode for the zone you are in
+/att ls e <event> will run it for specific zones 
+
+Zones for events
+
+	['Current Zone'] = {  },
+	['Fafnir/Nidhogg'] = { "Dragons_Aery", "The_Boyahda_Tree" },
+	['Jormungand'] = { "Uleguerand_Range" },
+	['Shikigami Weapon'] = { "RoMaeve" },
+	['Tiamat'] = { "Attohwa_Chasm", "Maze_of_Shakhrami" },
+	['Vrtra'] = { "King_Ranperres_Tomb" },
+	['King Arthro'] = { "Jugner_Forest" }, 
+	['King Vinegarroon'] = { "Western_Altepa_Desert" }, 
+	['(King) Behemoth'] = { "Behemoths_Dominion", "Qufim_Island" }, 
+	['Aspidochelone/Adamantoise'] = { "Valley_of_Sorrows", "Cape_Teriggan" }, 
+	['Sky/Kirin'] = { "RuAun_Gardens", "The_Shrine_of_RuAvitau", "VeLugannon_Palace", "LaLoff_Amphitheater", "Stellar_Fulcrum", "The_Celestial_Nexus" },
+	['Dynamis'] = { "Dynamis-Valkurm", "Dynamis-Buburimu", "Dynamis-Qufim", "Dynamis-Tavnazia", "Dynamis-Beaucedine", "Dynamis-Xarcabard", "Dynamis-San_dOria", "Dynamis-Bastok", "Dynamis-Windurst", "Dynamis-Jeuno" },
+	['Bloodsucker'] = { "Bostaunieux Oubliette" },
+	['Simurgh'] = { "Rolanberry_Fields" },
+	['Serket'] = { "Garlaige_Citadel" },
+    	['Sea'] = { "Al'Taieu", "Grand_Palace_of_Hu'Xzoi", "The_Garden_of_Ru'Hmet" },
+	['Bahamut'] = { "Riverne-Site_B01", "Lufaise_Meadows" },
+	['Ouryu'] = { "Riverne-Site_A01", "Lufaise_Meadows" },
+	['Sea'] = { "Sealions_Den", "AlTaieu", "The_Garden_of_RuHmet", "Grand_Palace_of_HuXzoi", "Empyreal_Paradox" },
+	['Limbus'] = { "Temenos", "Apollyon" }
+
+
+Short names for events (/att ls e faf)
+
+
+	['default'] = "Current Zone",
+    	['faf'] = "Fafnir/Nidhogg",
+	['fafnir'] = "Fafnir/Nidhogg",
+    	['nid'] = "Fafnir/Nidhogg",
+	['nidhogg'] = "Fafnir/Nidhogg",
+    	['fafhogg'] = "Fafnir/Nidhogg",
+    	['jorm'] = "Jormungand",
+    	['shiki'] = "Shikigami Weapon",
+	['shikigami'] = "Shikigami Weapon",
+    	['tiamat'] = "Tiamat",
+    	['tia'] = "Tiamat",
+    	['vrtra'] = "Vrtra",
+    	['ka'] = "King Arthro",
+    	['kv'] = "King Vinegarroon",
+    	['kb'] = "(King) Behemoth",
+    	['behe'] = "(King) Behemoth",
+    	['turtle'] = "Aspidochelone/Adamantoise",
+    	['aspi'] = "Aspidochelone/Adamantoise",
+    	['aspid'] = "Aspidochelone/Adamantoise",
+    	['kirin'] = "Sky/Kirin",
+    	['sky'] = "Sky/Kirin",
+    	['dyna'] = "Dynamis",
+	['xolo'] = "Xolotl",
+	['xolotl'] = "Xolotl",
+	['bloodsucker'] = "Bloodsucker",
+	['bs'] = "Bloodsucker",
+	['ouryu'] = "Ouryu",
+	['bahav2'] = "Bahamut",
+	['baha'] = "Bahamut",
+	['bahamut'] = "Bahamut",
+	['sea'] = "Sea",
+	['limbus'] = "Limbus",
+	['Default'] = "Current Zone",
+    	['Faf'] = "Fafnir/Nidhogg",
+	['Fafnir'] = "Fafnir/Nidhogg",
+    	['Nid'] = "Fafnir/Nidhogg",
+	['Nidhogg'] = "Fafnir/Nidhogg",
+    	['Fafhogg'] = "Fafnir/Nidhogg",
+    	['Jorm'] = "Jormungand",
+    	['Shiki'] = "Shikigami Weapon",
+	['Shikigami'] = "Shikigami Weapon",
+    	['Tiamat'] = "Tiamat",
+    	['Tia'] = "Tiamat",
+    	['Vrtra'] = "Vrtra",
+    	['Ka'] = "King Arthro",
+    	['Kv'] = "King Vinegarroon",
+    	['Kb'] = "(King) Behemoth",
+    	['Behe'] = "(King) Behemoth",
+    	['Turtle'] = "Aspidochelone/Adamantoise",
+    	['Aspi'] = "Aspidochelone/Adamantoise",
+    	['Aspid'] = "Aspidochelone/Adamantoise",
+    	['Kirin'] = "Sky/Kirin",
+    	['Sky'] = "Sky/Kirin",
+    	['Dyna'] = "Dynamis",
+	['Xolo'] = "Xolotl",
+	['Xolotl'] = "Xolotl",
+	['Bloodsucker'] = "Bloodsucker",
+	['Bs'] = "Bloodsucker",
+	['Ouryu'] = "Ouryu",
+	['Bahav2'] = "Bahamut",
+	['Baha'] = "Bahamut",
+	['Bahamut'] = "Bahamut",
+	['Sea'] = "Sea",
+	['Limbus'] = "Limbus"
