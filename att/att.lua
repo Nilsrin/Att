@@ -1,6 +1,6 @@
 addon.name      = 'att';
-addon.author    = 'literallywho';
-addon.version   = '1.0';
+addon.author    = 'literallywho, edited by Nils';
+addon.version   = '1.1';
 addon.desc      = 'takes attendance';
 
 require('common');
@@ -41,7 +41,7 @@ local shortNames = {
 	['bahamut'] = "Bahamut",
 	['sea'] = "Sea",
 	['limbus'] = "Limbus",
-		['Default'] = "Current Zone",
+	['Default'] = "Current Zone",
     ['Faf'] = "Fafnir/Nidhogg",
 	['Fafnir'] = "Fafnir/Nidhogg",
     ['Nid'] = "Fafnir/Nidhogg",
@@ -72,22 +72,42 @@ local shortNames = {
 	['Baha'] = "Bahamut",
 	['Bahamut'] = "Bahamut",
 	['Sea'] = "Sea",
-	['Limbus'] = "Limbus"
-	
+	['Limbus'] = "Limbus",
+	['simurgh'] = "Simurgh",
+	['Simurgh'] = "Simurgh",
+	['OA'] = "Overlord Arthro",
+	['RR'] = "Ruinous Rocs",
+	['SS'] = "Sacred Scorpions",
+	['henmcrab'] = "Overlord Arthro",
+	['henmbirds'] = "Ruinous Rocs",
+	['henmscorps'] = "Sacred Scorpions",
+	['crab'] = "Overlord Arthro",
+	['rocs'] = "Ruinous Rocs",
+	['scorps'] = "Sacred Scorpions",
+	['oa'] = "Overlord Arthro",
+	['rr'] = "Ruinous Rocs",
+	['ss'] = "Sacred Scorpions",
+	['HENMCrab'] = "Overlord Arthro",
+	['HENMRocs'] = "Ruinous Rocs",
+	['HENMScorps'] = "Sacred Scorpions",
+	['Crab'] = "Overlord Arthro",
+	['Rocs'] = "Ruinous Rocs",
+	['Scorps'] = "Sacred Scorpions"
+
 
 };
 
 local creditNames = {
 	['Current Zone'] = {  },
-	['Fafnir/Nidhogg'] = { "Dragons_Aery", "The_Boyahda_Tree" },
+	['Fafnir/Nidhogg'] = { "Dragons_Aery"},
 	['Jormungand'] = { "Uleguerand_Range" },
 	['Shikigami Weapon'] = { "RoMaeve" },
-	['Tiamat'] = { "Attohwa_Chasm", "Maze_of_Shakhrami" },
+	['Tiamat'] = { "Attohwa_Chasm"},
 	['Vrtra'] = { "King_Ranperres_Tomb" },
 	['King Arthro'] = { "Jugner_Forest" }, 
 	['King Vinegarroon'] = { "Western_Altepa_Desert" }, 
-	['(King) Behemoth'] = { "Behemoths_Dominion", "Qufim_Island" }, 
-	['Aspidochelone/Adamantoise'] = { "Valley_of_Sorrows", "Cape_Teriggan" }, 
+	['(King) Behemoth'] = { "Behemoths_Dominion"}, 
+	['Aspidochelone/Adamantoise'] = { "Valley_of_Sorrows"}, 
 	['Sky/Kirin'] = { "RuAun_Gardens", "The_Shrine_of_RuAvitau", "VeLugannon_Palace", "LaLoff_Amphitheater", "Stellar_Fulcrum", "The_Celestial_Nexus" },
 	['Dynamis'] = { "Dynamis-Valkurm", "Dynamis-Buburimu", "Dynamis-Qufim", "Dynamis-Tavnazia", "Dynamis-Beaucedine", "Dynamis-Xarcabard", "Dynamis-San_dOria", "Dynamis-Bastok", "Dynamis-Windurst", "Dynamis-Jeuno" },
 	['Bloodsucker'] = { "Bostaunieux_Oubliette" },
@@ -97,7 +117,10 @@ local creditNames = {
 	['Bahamut'] = { "Riverne-Site_B01", "Lufaise_Meadows" },
 	['Ouryu'] = { "Riverne-Site_A01", "Lufaise_Meadows" },
 	['Sea'] = { "Sealions_Den", "AlTaieu", "The_Garden_of_RuHmet", "Grand_Palace_of_HuXzoi", "Empyreal_Paradox" },
-	['Limbus'] = { "Temenos", "Apollyon" }
+	['Limbus'] = { "Temenos", "Apollyon" },
+	['Overlord Arthro'] = { "Jugner_Forest" },
+	['Ruinous Rocs'] = { "Rolanberry_Fields" },
+	['Sacred Scorpions'] = { "Sauromugue_Champaign" }
 	
 };
 

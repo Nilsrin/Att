@@ -99,3 +99,26 @@ Short names for events (/att ls e faf)
 	['Bahamut'] = "Bahamut",
 	['Sea'] = "Sea",
 	['Limbus'] = "Limbus"
+
+** Added HENM stuff **
+
+	['simurgh'] = "Simurgh",
+	['Simurgh'] = "Simurgh",
+	['OA'] = "Overlord Arthro",
+	['RR'] = "Ruinous Rocs",
+	['SS'] = "Sacred Scorpions",
+	['henmcrab'] = "Overlord Arthro",
+	['henmbirds'] = "Ruinous Rocs",
+	['henmscorps'] = "Sacred Scorpions",
+	['crab'] = "Overlord Arthro",
+	['rocs'] = "Ruinous Rocs",
+	['scorps'] = "Sacred Scorpions",
+	['oa'] = "Overlord Arthro",
+	['rr'] = "Ruinous Rocs",
+	['ss'] = "Sacred Scorpions",
+	['HENMCrab'] = "Overlord Arthro",
+	['HENMRocs'] = "Ruinous Rocs",
+	['HENMScorps'] = "Sacred Scorpions",
+	['Crab'] = "Overlord Arthro",
+	['Rocs'] = "Ruinous Rocs",
+	['Scorps'] = "Sacred Scorpions"
