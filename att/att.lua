@@ -55,6 +55,7 @@ local shortNames = {
     ['Vrtra'] = "Vrtra",
     ['Ka'] = "King Arthro",
     ['Kv'] = "King Vinegarroon",
+	['KV'] = "King Vinegarroon",
     ['Kb'] = "(King) Behemoth",
     ['Behe'] = "(King) Behemoth",
     ['Turtle'] = "Aspidochelone/Adamantoise",
@@ -120,7 +121,8 @@ local creditNames = {
 	['Limbus'] = { "Temenos", "Apollyon" },
 	['Overlord Arthro'] = { "Jugner_Forest" },
 	['Ruinous Rocs'] = { "Rolanberry_Fields" },
-	['Sacred Scorpions'] = { "Sauromugue_Champaign" }
+	['Sacred Scorpions'] = { "Sauromugue_Champaign" },
+	['Xolotl'] = { "Attohwa_Chasm"}
 	
 };
 
@@ -224,6 +226,15 @@ ashita.events.register('command', 'command_cb', function (e)
 			eventName = eventName + 1;
 			eventName = shortNames[args[eventName]];
 			print("Running in event mode.");
+			
+			   if eventName then
+                -- Send a message to linkshell chat after a slight delay
+                local message = "Attendance has been taken for " .. eventName;
+                AshitaCore:GetChatManager():QueueCommand(1, '/l ' ..message) coroutine.sleep(1.5);
+            else
+                print("Invalid event name specified.");
+            end
+			
 		end;
 		
 		print("Eligible zones for attendance: ");
@@ -269,4 +280,3 @@ ashita.events.register('command', 'command_cb', function (e)
         return;
     end;
 end);
-
