@@ -9,7 +9,9 @@ local zoneList = {}
 local jobList = {}
 
 local shortNames = {
+
 	['default'] = "Current Zone",
+	[''] = "Current Zone",
     ['faf'] = "Fafnir/Nidhogg",
 	['fafnir'] = "Fafnir/Nidhogg",
     ['nid'] = "Fafnir/Nidhogg",
@@ -93,9 +95,23 @@ local shortNames = {
 	['HENMScorps'] = "Sacred Scorpions",
 	['Crab'] = "Overlord Arthro",
 	['Rocs'] = "Ruinous Rocs",
-	['Scorps'] = "Sacred Scorpions"
-
-
+	['Scorps'] = "Sacred Scorpions",
+	['Mammet'] = "Mammet-9999",
+	['mammet'] = "Mammet-9999",
+	['9999'] = "Mammet-9999",
+	['Mam'] = "Mammet-9999",
+	['mam'] = "Mammet-9999",
+	['Ultimega'] = "Ultimega",
+	['ultimega'] = "Ultimega",
+	['UO'] = "Ultimega",
+	['uo'] = "Ultimega",
+	['Tonberry'] = "Tonberry Sovereign",
+	['tonberry'] = "Tonberry Sovereign",
+	['Ton'] = "Tonberry Sovereign",
+	['ton'] = "Tonberry Sovereign",
+	['Sov'] = "Tonberry Sovereign",
+	['sov'] = "Tonberry Sovereign"
+	
 };
 
 local creditNames = {
@@ -122,7 +138,10 @@ local creditNames = {
 	['Overlord Arthro'] = { "Jugner_Forest" },
 	['Ruinous Rocs'] = { "Rolanberry_Fields" },
 	['Sacred Scorpions'] = { "Sauromugue_Champaign" },
-	['Xolotl'] = { "Attohwa_Chasm"}
+	['Xolotl'] = { "Attohwa_Chasm" },
+	['Mammet-9999'] = { "Misareaux_Coast" },
+	['Ultimega'] = { "Lufaise_Meadows" },
+	['Tonberry Sovereign'] = { "Yhoator_Jungle" },
 	
 };
 
@@ -229,7 +248,7 @@ ashita.events.register('command', 'command_cb', function (e)
 			
 			   if eventName then
                 -- Send a message to linkshell chat after a slight delay
-                local message = "Attendance has been taken for " .. eventName;
+                local message = "" .. " Attendance taken: " .. eventName .. "";
                 AshitaCore:GetChatManager():QueueCommand(1, '/l ' ..message) coroutine.sleep(1.5);
             else
                 print("Invalid event name specified.");

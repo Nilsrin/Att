@@ -36,6 +36,7 @@ Short names for events (/att ls e faf)
 
 
 	['default'] = "Current Zone",
+	[''] = "Current Zone",
     	['faf'] = "Fafnir/Nidhogg",
 	['fafnir'] = "Fafnir/Nidhogg",
     	['nid'] = "Fafnir/Nidhogg",
@@ -81,14 +82,15 @@ Short names for events (/att ls e faf)
     	['Vrtra'] = "Vrtra",
     	['Ka'] = "King Arthro",
     	['Kv'] = "King Vinegarroon",
-    	['Kb'] = "(King) Behemoth",
-    	['Behe'] = "(King) Behemoth",
-    	['Turtle'] = "Aspidochelone/Adamantoise",
-    	['Aspi'] = "Aspidochelone/Adamantoise",
-    	['Aspid'] = "Aspidochelone/Adamantoise",
-    	['Kirin'] = "Sky/Kirin",
+	['KV'] = "King Vinegarroon",
+   	['Kb'] = "(King) Behemoth",
+   	['Behe'] = "(King) Behemoth",
+   	['Turtle'] = "Aspidochelone/Adamantoise",
+   	['Aspi'] = "Aspidochelone/Adamantoise",
+   	['Aspid'] = "Aspidochelone/Adamantoise",
+   	['Kirin'] = "Sky/Kirin",
     	['Sky'] = "Sky/Kirin",
-    	['Dyna'] = "Dynamis",
+   	['Dyna'] = "Dynamis",
 	['Xolo'] = "Xolotl",
 	['Xolotl'] = "Xolotl",
 	['Bloodsucker'] = "Bloodsucker",
@@ -98,10 +100,7 @@ Short names for events (/att ls e faf)
 	['Baha'] = "Bahamut",
 	['Bahamut'] = "Bahamut",
 	['Sea'] = "Sea",
-	['Limbus'] = "Limbus"
-
-** Added HENM stuff **
-
+	['Limbus'] = "Limbus",
 	['simurgh'] = "Simurgh",
 	['Simurgh'] = "Simurgh",
 	['OA'] = "Overlord Arthro",
@@ -121,4 +120,19 @@ Short names for events (/att ls e faf)
 	['HENMScorps'] = "Sacred Scorpions",
 	['Crab'] = "Overlord Arthro",
 	['Rocs'] = "Ruinous Rocs",
-	['Scorps'] = "Sacred Scorpions"
+	['Scorps'] = "Sacred Scorpions",
+	['Mammet'] = "Mammet-9999",
+	['mammet'] = "Mammet-9999",
+	['9999'] = "Mammet-9999",
+	['Mam'] = "Mammet-9999",
+	['mam'] = "Mammet-9999",
+	['Ultimega'] = "Ultimega",
+	['ultimega'] = "Ultimega",
+	['UO'] = "Ultimega",
+	['uo'] = "Ultimega",
+	['Tonberry'] = "Tonberry Sovereign",
+	['tonberry'] = "Tonberry Sovereign",
+	['Ton'] = "Tonberry Sovereign",
+	['ton'] = "Tonberry Sovereign",
+	['Sov'] = "Tonberry Sovereign",
+	['sov'] = "Tonberry Sovereign"
