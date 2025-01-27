@@ -1,138 +1,132 @@
-Attendance addon for FFXI
+Attendance Addon (att)
+======================
+Author: literallywho, Nils  
+Version: 2.1  
 
-This addon works using the link list found under the linkshell menu. This is done so that it does not truncate over a certain number of people. 
+A Final Fantasy XI Ashita v4 addon that takes attendance of players (alliance-based or zone-based), provides a GUI to review/remove entries, and writes the final roster to a CSV file. It can optionally send a linkshell (LS) message announcing that attendance was taken for either an HNM or an Event.
 
-It is primarily used to run attendance for certain events. For example, /att ls e faf would run attendance for fafnir. 
+---------------------------------------
+1. Installation
+---------------------------------------
+1. Obtain the addon:
+   - Place the entire "att" folder inside your Ashita v4 "addons" directory.
+   - Inside the "att" folder, you should see "att.lua" plus a "resources" folder containing several CSV/TXT files (e.g. jobs.csv, zones.csv, shortnames.txt, creditnames.txt).
 
-/att will run a basic mode
-/att ls will run a linklist mode for the zone you are in
-/att ls e <event> will run it for specific zones 
+2. Required Files:
+   - att.lua – The main addon code.
+   - resources/jobs.csv – Lists job IDs → job names.
+   - resources/zones.csv – Lists zone IDs → zone names.
+   - resources/shortnames.txt – Alias → full event name pairs.
+   - resources/creditnames.txt – Defines which zones count for each event name.
 
-Zones for events
+3. Load the addon:
+   - Place "att" in your Ashita addons folder.
+   - Either add it to scripts/default.txt or manually load it in-game via:
+     /addon load att
 
-	['Current Zone'] = {  },
-	['Fafnir/Nidhogg'] = { "Dragons_Aery", "The_Boyahda_Tree" },
-	['Jormungand'] = { "Uleguerand_Range" },
-	['Shikigami Weapon'] = { "RoMaeve" },
-	['Tiamat'] = { "Attohwa_Chasm", "Maze_of_Shakhrami" },
-	['Vrtra'] = { "King_Ranperres_Tomb" },
-	['King Arthro'] = { "Jugner_Forest" }, 
-	['King Vinegarroon'] = { "Western_Altepa_Desert" }, 
-	['(King) Behemoth'] = { "Behemoths_Dominion", "Qufim_Island" }, 
-	['Aspidochelone/Adamantoise'] = { "Valley_of_Sorrows", "Cape_Teriggan" }, 
-	['Sky/Kirin'] = { "RuAun_Gardens", "The_Shrine_of_RuAvitau", "VeLugannon_Palace", "LaLoff_Amphitheater", "Stellar_Fulcrum", "The_Celestial_Nexus" },
-	['Dynamis'] = { "Dynamis-Valkurm", "Dynamis-Buburimu", "Dynamis-Qufim", "Dynamis-Tavnazia", "Dynamis-Beaucedine", "Dynamis-Xarcabard", "Dynamis-San_dOria", "Dynamis-Bastok", "Dynamis-Windurst", "Dynamis-Jeuno" },
-	['Bloodsucker'] = { "Bostaunieux Oubliette" },
-	['Simurgh'] = { "Rolanberry_Fields" },
-	['Serket'] = { "Garlaige_Citadel" },
-    	['Sea'] = { "Al'Taieu", "Grand_Palace_of_Hu'Xzoi", "The_Garden_of_Ru'Hmet" },
-	['Bahamut'] = { "Riverne-Site_B01", "Lufaise_Meadows" },
-	['Ouryu'] = { "Riverne-Site_A01", "Lufaise_Meadows" },
-	['Sea'] = { "Sealions_Den", "AlTaieu", "The_Garden_of_RuHmet", "Grand_Palace_of_HuXzoi", "Empyreal_Paradox" },
-	['Limbus'] = { "Temenos", "Apollyon" }
+---------------------------------------
+2. Files and Folders
+---------------------------------------
+- att.lua
+  Main addon script.
+
+- resources/
+  - jobs.csv
+    Used to look up main/sub job names by ID.
+  - zones.csv
+    Used to look up zone names by ID.
+  - shortnames.txt
+    Contains lines: "alias,Full Event Name" (e.g. aspi,Aspidochelone).
+  - creditnames.txt
+    Each line: "Full Event Name,Zone Name" (e.g. Aspidochelone,Valley of Sorrows).
+    Tells the addon which zones grant credit for each named event/HNM.
+
+- Log Folders:
+  - Event Logs/ – Attendance CSVs for events.
+  - HNM Logs/ – Attendance CSVs for HNMs.
 
 
-Short names for events (/att ls e faf)
+---------------------------------------
+3. Usage Overview
+---------------------------------------
+Main Command: /att
+
+1) No arguments:
+   - Gathers attendance from your party/alliance only.
+   - Defaults to HNM mode, but you can switch to Event mode in the GUI if you like.
+
+2) Optional arguments:
+
+   - ls
+     /att ls
+     Gathers attendance from all players in range (zone-based) rather than alliance-based.
+
+   - Short Alias
+     /att aspi
+     If "aspi" exists in shortnames.txt, sets the event name to that full name (e.g. "Aspidochelone").
+     Otherwise defaults to "Current Zone".
+
+3) Help Command:
+	 /att help
+     Opens a Help Window listing all short aliases that would apply to your current zone.
+
+---------------------------------------
+4. The ImGui Interface
+---------------------------------------
+After running a valid /att command (e.g. /att, /att ls, /att aspi), the addon:
+
+- Collects attendee data (alliance-based or zone-based).
+- Opens a window titled "Attendance Results."
+
+Inside this window:
+- Mode Selection (Radio Buttons):
+  - HNM (default)
+  - Event
+  Determines which folder the CSV is saved to (HNM Logs or Event Logs) and which LS message is sent.
+- Event Name Display:
+  Shows whichever event name was resolved (from short alias or "Current Zone").
+- Attendee List:
+  Name, Zone, Main/Sub Job. Each entry has a "Remove" button if you want to exclude them.
+- Final Buttons:
+  - Write & Close:
+    Writes the CSV file and sends the LS message if one was determined.
+    Closes the GUI window.
+  - Cancel:
+    Closes without writing or sending any message.
+
+If you click [X] to close the window, it's the same as Cancel.
 
 
-	['default'] = "Current Zone",
-	[''] = "Current Zone",
-    	['faf'] = "Fafnir/Nidhogg",
-	['fafnir'] = "Fafnir/Nidhogg",
-    	['nid'] = "Fafnir/Nidhogg",
-	['nidhogg'] = "Fafnir/Nidhogg",
-    	['fafhogg'] = "Fafnir/Nidhogg",
-    	['jorm'] = "Jormungand",
-    	['shiki'] = "Shikigami Weapon",
-	['shikigami'] = "Shikigami Weapon",
-    	['tiamat'] = "Tiamat",
-    	['tia'] = "Tiamat",
-    	['vrtra'] = "Vrtra",
-    	['ka'] = "King Arthro",
-    	['kv'] = "King Vinegarroon",
-    	['kb'] = "(King) Behemoth",
-    	['behe'] = "(King) Behemoth",
-    	['turtle'] = "Aspidochelone/Adamantoise",
-    	['aspi'] = "Aspidochelone/Adamantoise",
-    	['aspid'] = "Aspidochelone/Adamantoise",
-    	['kirin'] = "Sky/Kirin",
-    	['sky'] = "Sky/Kirin",
-    	['dyna'] = "Dynamis",
-	['xolo'] = "Xolotl",
-	['xolotl'] = "Xolotl",
-	['bloodsucker'] = "Bloodsucker",
-	['bs'] = "Bloodsucker",
-	['ouryu'] = "Ouryu",
-	['bahav2'] = "Bahamut",
-	['baha'] = "Bahamut",
-	['bahamut'] = "Bahamut",
-	['sea'] = "Sea",
-	['limbus'] = "Limbus",
-	['Default'] = "Current Zone",
-    	['Faf'] = "Fafnir/Nidhogg",
-	['Fafnir'] = "Fafnir/Nidhogg",
-    	['Nid'] = "Fafnir/Nidhogg",
-	['Nidhogg'] = "Fafnir/Nidhogg",
-    	['Fafhogg'] = "Fafnir/Nidhogg",
-    	['Jorm'] = "Jormungand",
-    	['Shiki'] = "Shikigami Weapon",
-	['Shikigami'] = "Shikigami Weapon",
-    	['Tiamat'] = "Tiamat",
-    	['Tia'] = "Tiamat",
-    	['Vrtra'] = "Vrtra",
-    	['Ka'] = "King Arthro",
-    	['Kv'] = "King Vinegarroon",
-	['KV'] = "King Vinegarroon",
-   	['Kb'] = "(King) Behemoth",
-   	['Behe'] = "(King) Behemoth",
-   	['Turtle'] = "Aspidochelone/Adamantoise",
-   	['Aspi'] = "Aspidochelone/Adamantoise",
-   	['Aspid'] = "Aspidochelone/Adamantoise",
-   	['Kirin'] = "Sky/Kirin",
-    	['Sky'] = "Sky/Kirin",
-   	['Dyna'] = "Dynamis",
-	['Xolo'] = "Xolotl",
-	['Xolotl'] = "Xolotl",
-	['Bloodsucker'] = "Bloodsucker",
-	['Bs'] = "Bloodsucker",
-	['Ouryu'] = "Ouryu",
-	['Bahav2'] = "Bahamut",
-	['Baha'] = "Bahamut",
-	['Bahamut'] = "Bahamut",
-	['Sea'] = "Sea",
-	['Limbus'] = "Limbus",
-	['simurgh'] = "Simurgh",
-	['Simurgh'] = "Simurgh",
-	['OA'] = "Overlord Arthro",
-	['RR'] = "Ruinous Rocs",
-	['SS'] = "Sacred Scorpions",
-	['henmcrab'] = "Overlord Arthro",
-	['henmbirds'] = "Ruinous Rocs",
-	['henmscorps'] = "Sacred Scorpions",
-	['crab'] = "Overlord Arthro",
-	['rocs'] = "Ruinous Rocs",
-	['scorps'] = "Sacred Scorpions",
-	['oa'] = "Overlord Arthro",
-	['rr'] = "Ruinous Rocs",
-	['ss'] = "Sacred Scorpions",
-	['HENMCrab'] = "Overlord Arthro",
-	['HENMRocs'] = "Ruinous Rocs",
-	['HENMScorps'] = "Sacred Scorpions",
-	['Crab'] = "Overlord Arthro",
-	['Rocs'] = "Ruinous Rocs",
-	['Scorps'] = "Sacred Scorpions",
-	['Mammet'] = "Mammet-9999",
-	['mammet'] = "Mammet-9999",
-	['9999'] = "Mammet-9999",
-	['Mam'] = "Mammet-9999",
-	['mam'] = "Mammet-9999",
-	['Ultimega'] = "Ultimega",
-	['ultimega'] = "Ultimega",
-	['UO'] = "Ultimega",
-	['uo'] = "Ultimega",
-	['Tonberry'] = "Tonberry Sovereign",
-	['tonberry'] = "Tonberry Sovereign",
-	['Ton'] = "Tonberry Sovereign",
-	['ton'] = "Tonberry Sovereign",
-	['Sov'] = "Tonberry Sovereign",
-	['sov'] = "Tonberry Sovereign"
+---------------------------------------
+5. File Output
+---------------------------------------
+When you click "Write & Close," one line per attendee is written:
+Name,MainJob,Date,Time,Zone,EventName
+
+Example CSV filenames:
+- HNM Logs/Monday 23 January 2025 12.34.56.csv
+- Event Logs/Monday 23 January 2025 12.34.56.csv
+
+---------------------------------------
+6. Customizing Short Names and Credit Zones
+---------------------------------------
+shortnames.txt
+   - Defines "alias,Full Event Name" pairs, e.g. aspi,Aspidochelone
+creditnames.txt
+   - Defines "Full Event Name,Zone Name", e.g. Aspidochelone,Valley of Sorrows
+
+Thus, if you do /att aspi, only those in "Valley of Sorrows" (for Aspidochelone) are included.
+
+---------------------------------------
+7. Examples
+---------------------------------------
+1) /att
+   Alliance-based, no short alias → defaults to "Current Zone" with GUI in HNM mode.
+2) /att aspi
+   Alliance-based, short alias "aspi" → event name is "Aspidochelone" (if found).
+3) /att ls
+   Zone-based, no short alias → "Current Zone" is used, HNM mode by default.
+4) /att ls aspi
+   Zone-based, short alias "aspi" → "Aspidochelone" in zone-based gather.
+5) /att help
+   Shows short aliases valid for your current zone in a separate Help Window.

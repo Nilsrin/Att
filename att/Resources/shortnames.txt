@@ -1,0 +1,103 @@
+Default,Current Zone
+faf,Fafnir/Nidhogg
+fafnir,Fafnir/Nidhogg
+nid,Fafnir/Nidhogg
+nidhogg,Fafnir/Nidhogg
+fafhogg,Fafnir/Nidhogg
+Faf,Fafnir/Nidhogg
+Fafnir,Fafnir/Nidhogg
+Nid,Fafnir/Nidhogg
+Nidhogg,Fafnir/Nidhogg
+Fafhogg,Fafnir/Nidhogg
+jorm,Jormungand
+Jorm,Jormungand
+shiki,Shikigami Weapon
+shikigami,Shikigami Weapon
+Shiki,Shikigami Weapon
+Shikigami,Shikigami Weapon
+tiamat,Tiamat
+tia,Tiamat
+Tiamat,Tiamat
+Tia,Tiamat
+vrtra,Vrtra
+Vrtra,Vrtra
+ka,King Arthro
+Ka,King Arthro
+kv,King Vinegarroon
+Kv,King Vinegarroon
+KV,King Vinegarroon
+kb,(King) Behemoth
+behe,(King) Behemoth
+Kb,(King) Behemoth
+Behe,(King) Behemoth
+turtle,Aspidochelone/Adamantoise
+aspi,Aspidochelone/Adamantoise
+aspid,Aspidochelone/Adamantoise
+Turtle,Aspidochelone/Adamantoise
+Aspi,Aspidochelone/Adamantoise
+Aspid,Aspidochelone/Adamantoise
+kirin,Sky/Kirin
+sky,Sky/Kirin
+Kirin,Sky/Kirin
+Sky,Sky/Kirin
+dyna,Dynamis
+Dyna,Dynamis
+xolo,Xolotl
+xolotl,Xolotl
+Xolo,Xolotl
+Xolotl,Xolotl
+bloodsucker,Bloodsucker
+bs,Bloodsucker
+Bloodsucker,Bloodsucker
+Bs,Bloodsucker
+ouryu,Ouryu
+Ouryu,Ouryu
+bahav2,Bahamut
+baha,Bahamut
+bahamut,Bahamut
+Bahav2,Bahamut
+Baha,Bahamut
+Bahamut,Bahamut
+sea,Sea
+Sea,Sea
+limbus,Limbus
+Limbus,Limbus
+simurgh,Simurgh
+Simurgh,Simurgh
+sim,Simurgh
+Sim,Simurgh
+oa,Overlord Arthro
+OA,Overlord Arthro
+henmcrab,Overlord Arthro
+crab,Overlord Arthro
+HENMCrab,Overlord Arthro
+Crab,Overlord Arthro
+rr,Ruinous Rocs
+RR,Ruinous Rocs
+henmbirds,Ruinous Rocs
+rocs,Ruinous Rocs
+HENMRocs,Ruinous Rocs
+Rocs,Ruinous Rocs
+ss,Sacred Scorpions
+SS,Sacred Scorpions
+henmscorps,Sacred Scorpions
+scorps,Sacred Scorpions
+HENMScorps,Sacred Scorpions
+Scorps,Sacred Scorpions
+mammet,Mammet-9999
+9999,Mammet-9999
+Mam,Mammet-9999
+Mammet,Mammet-9999
+mam,Mammet-9999
+ultimega,Ultimega
+Ultimega,Ultimega
+UO,Ultimega
+uo,Ultimega
+tonberry,Tonberry Sovereign
+Tonberry,Tonberry Sovereign
+Ton,Tonberry Sovereign
+ton,Tonberry Sovereign
+Sov,Tonberry Sovereign
+sov,Tonberry Sovereign
+Serket,Serket
+serket,Serket

@@ -1,147 +1,54 @@
-addon.name      = 'att';
-addon.author    = 'literallywho, edited by Nils';
-addon.version   = '1.2';
-addon.desc      = 'takes attendance';
+addon.name      = 'att'
+addon.author    = 'literallywho, edited by Nils, further modified by ChatGPT'
+addon.version   = '2.1'
+addon.desc      = 'Takes attendance; user can remove entries before writing; LS message on finalize.'
 
-require('common');
-local chat = require('chat');
-local zoneList = {}
-local jobList = {}
+require('common')
+local imgui = require('imgui')
+local chat  = require('chat')
 
-local shortNames = {
-    ['default'] = "Current Zone",
-    [''] = "Current Zone",
-    ['Default'] = "Current Zone",
-    ['faf'] = "Fafnir/Nidhogg",
-    ['fafnir'] = "Fafnir/Nidhogg",
-    ['nid'] = "Fafnir/Nidhogg",
-    ['nidhogg'] = "Fafnir/Nidhogg",
-    ['fafhogg'] = "Fafnir/Nidhogg",
-    ['Faf'] = "Fafnir/Nidhogg",
-    ['Fafnir'] = "Fafnir/Nidhogg",
-    ['Nid'] = "Fafnir/Nidhogg",
-    ['Nidhogg'] = "Fafnir/Nidhogg",
-    ['Fafhogg'] = "Fafnir/Nidhogg",
-    ['jorm'] = "Jormungand",
-    ['Jorm'] = "Jormungand",
-    ['shiki'] = "Shikigami Weapon",
-    ['shikigami'] = "Shikigami Weapon",
-    ['Shiki'] = "Shikigami Weapon",
-    ['Shikigami'] = "Shikigami Weapon",
-    ['tiamat'] = "Tiamat",
-    ['tia'] = "Tiamat",
-    ['Tiamat'] = "Tiamat",
-    ['Tia'] = "Tiamat",
-    ['vrtra'] = "Vrtra",
-    ['Vrtra'] = "Vrtra",
-    ['ka'] = "King Arthro",
-    ['Ka'] = "King Arthro",
-    ['kv'] = "King Vinegarroon",
-    ['Kv'] = "King Vinegarroon",
-    ['KV'] = "King Vinegarroon",
-    ['kb'] = "(King) Behemoth",
-    ['behe'] = "(King) Behemoth",
-    ['Kb'] = "(King) Behemoth",
-    ['Behe'] = "(King) Behemoth",
-    ['turtle'] = "Aspidochelone/Adamantoise",
-    ['aspi'] = "Aspidochelone/Adamantoise",
-    ['aspid'] = "Aspidochelone/Adamantoise",
-    ['Turtle'] = "Aspidochelone/Adamantoise",
-    ['Aspi'] = "Aspidochelone/Adamantoise",
-    ['Aspid'] = "Aspidochelone/Adamantoise",
-    ['kirin'] = "Sky/Kirin",
-    ['sky'] = "Sky/Kirin",
-    ['Kirin'] = "Sky/Kirin",
-    ['Sky'] = "Sky/Kirin",
-    ['dyna'] = "Dynamis",
-    ['Dyna'] = "Dynamis",
-    ['xolo'] = "Xolotl",
-    ['xolotl'] = "Xolotl",
-    ['Xolo'] = "Xolotl",
-    ['Xolotl'] = "Xolotl",
-    ['bloodsucker'] = "Bloodsucker",
-    ['bs'] = "Bloodsucker",
-    ['Bloodsucker'] = "Bloodsucker",
-    ['Bs'] = "Bloodsucker",
-    ['ouryu'] = "Ouryu",
-    ['Ouryu'] = "Ouryu",
-    ['bahav2'] = "Bahamut",
-    ['baha'] = "Bahamut",
-    ['bahamut'] = "Bahamut",
-    ['Bahav2'] = "Bahamut",
-    ['Baha'] = "Bahamut",
-    ['Bahamut'] = "Bahamut",
-    ['sea'] = "Sea",
-    ['Sea'] = "Sea",
-    ['limbus'] = "Limbus",
-    ['Limbus'] = "Limbus",
-    ['simurgh'] = "Simurgh",
-    ['Simurgh'] = "Simurgh",
-    ['oa'] = "Overlord Arthro",
-    ['OA'] = "Overlord Arthro",
-    ['henmcrab'] = "Overlord Arthro",
-    ['crab'] = "Overlord Arthro",
-    ['HENMCrab'] = "Overlord Arthro",
-    ['Crab'] = "Overlord Arthro",
-    ['rr'] = "Ruinous Rocs",
-    ['RR'] = "Ruinous Rocs",
-    ['henmbirds'] = "Ruinous Rocs",
-    ['rocs'] = "Ruinous Rocs",
-    ['HENMRocs'] = "Ruinous Rocs",
-    ['Rocs'] = "Ruinous Rocs",
-    ['ss'] = "Sacred Scorpions",
-    ['SS'] = "Sacred Scorpions",
-    ['henmscorps'] = "Sacred Scorpions",
-    ['scorps'] = "Sacred Scorpions",
-    ['HENMScorps'] = "Sacred Scorpions",
-    ['Scorps'] = "Sacred Scorpions",
-    ['mammet'] = "Mammet-9999",
-    ['9999'] = "Mammet-9999",
-    ['Mam'] = "Mammet-9999",
-    ['Mammet'] = "Mammet-9999",
-    ['mam'] = "Mammet-9999",
-    ['ultimega'] = "Ultimega",
-    ['Ultimega'] = "Ultimega",
-    ['UO'] = "Ultimega",
-    ['uo'] = "Ultimega",
-    ['tonberry'] = "Tonberry Sovereign",
-    ['Tonberry'] = "Tonberry Sovereign",
-    ['Ton'] = "Tonberry Sovereign",
-    ['ton'] = "Tonberry Sovereign",
-    ['Sov'] = "Tonberry Sovereign",
-    ['sov'] = "Tonberry Sovereign"
-};
+--------------------------------------------------------------------------------
+-- Global / top-level variables
+--------------------------------------------------------------------------------
 
-local creditNames = {
-    ['Current Zone'] = {},
-    ['Fafnir/Nidhogg'] = {"Dragons_Aery"},
-    ['Jormungand'] = {"Uleguerand_Range"},
-    ['Shikigami Weapon'] = {"RoMaeve"},
-    ['Tiamat'] = {"Attohwa_Chasm"},
-    ['Vrtra'] = {"King_Ranperres_Tomb"},
-    ['King Arthro'] = {"Jugner_Forest"},
-    ['King Vinegarroon'] = {"Western_Altepa_Desert"},
-    ['(King) Behemoth'] = {"Behemoths_Dominion"},
-    ['Aspidochelone/Adamantoise'] = {"Valley_of_Sorrows"},
-    ['Sky/Kirin'] = {"RuAun_Gardens", "The_Shrine_of_RuAvitau", "VeLugannon_Palace", "LaLoff_Amphitheater", "Stellar_Fulcrum", "The_Celestial_Nexus"},
-    ['Dynamis'] = {"Dynamis-Valkurm", "Dynamis-Buburimu", "Dynamis-Qufim", "Dynamis-Tavnazia", "Dynamis-Beaucedine", "Dynamis-Xarcabard", "Dynamis-San_dOria", "Dynamis-Bastok", "Dynamis-Windurst", "Dynamis-Jeuno"},
-    ['Bloodsucker'] = {"Bostaunieux_Oubliette"},
-    ['Simurgh'] = {"Rolanberry_Fields"},
-    ['Ouryu'] = {"Riverne-Site_A01", "Lufaise_Meadows"},
-    ['Bahamut'] = {"Riverne-Site_B01", "Lufaise_Meadows"},
-    ['Sea'] = {"Sealions_Den", "AlTaieu", "The_Garden_of_RuHmet", "Grand_Palace_of_HuXzoi", "Empyreal_Paradox"},
-    ['Limbus'] = {"Temenos", "Apollyon"},
-    ['Overlord Arthro'] = {"Jugner_Forest"},
-    ['Ruinous Rocs'] = {"Rolanberry_Fields"},
-    ['Sacred Scorpions'] = {"Sauromugue_Champaign"},
-    ['Xolotl'] = {"Attohwa_Chasm"},
-    ['Mammet-9999'] = {"Misareaux_Coast"},
-    ['Ultimega'] = {"Lufaise_Meadows"},
-    ['Tonberry Sovereign'] = {"Yhoator_Jungle"}
-};
+-- Resource tables (populated at load time).
+local zoneList    = {}
+local jobList     = {}
+local shortNames  = {}
+local creditNames = {}
+
+-- GUI / Attendance state:
+local isAttendanceWindowOpen = false
+
+-- Help Window state:
+local isHelpWindowOpen  = false
+local helpData          = {}   -- { { alias = 'xxx', name = 'Full Event Name' }, ... }
+
+-- The data we plan to write. Each element: { name, jobsMain, jobsSub, zone, time }
+local attendanceData = {}
+
+-- We'll store the final event name the user is "taking attendance for."
+local pendingEventName   = nil
+
+-- We store the shortName the user typed (if any).
+local pendingShortAlias  = nil
+
+-- Instead of deciding "HNM" or "Event" from commands, user picks it in GUI:
+-- (HNM is now the default, per your request!)
+local selectedMode = 'HNM'  -- can be 'Event' or 'HNM'
+
+-- We build the CSV path on finalize:
+local pendingFilePath    = nil
+
+-- We build the LS message on finalize:
+local pendingLSMessage   = nil
+
+--------------------------------------------------------------------------------
+-- Helpers
+--------------------------------------------------------------------------------
 
 local function has_value(tab, val)
-    for index, value in ipairs(tab) do
+    for _, value in ipairs(tab) do
         if value == val then
             return true
         end
@@ -149,149 +56,434 @@ local function has_value(tab, val)
     return false
 end
 
-local function value_index(tab, val)
-    local i = 0;
-    for index, value in ipairs(tab) do
-        i = i + 1;
-        if value == val then
-            return i;
+--------------------------------------------------------------------------------
+-- Load external resource files
+--------------------------------------------------------------------------------
+
+local function loadShortNames()
+    -- Format (shortnames.txt):  alias,Full Event Name
+    local path = string.format('%sresources/shortnames.txt', addon.path)
+    local file = io.open(path, 'r')
+    if not file then
+        print(string.format('Could not load shortnames.txt at path: %s', path))
+        return
+    end
+
+    for line in file:lines() do
+        local alias, fullname = line:match('^(.-),(.*)$')
+        if alias and fullname then
+            alias    = alias:match('^%s*(.-)%s*$')      -- trim
+            fullname = fullname:match('^%s*(.-)%s*$')
+            shortNames[alias:lower()] = fullname
         end
     end
-    return i;
+    file:close()
 end
 
-ashita.events.register('unload', 'unload_cb', function ()
+local function loadCreditNames()
+    -- Format (creditnames.txt): FullEventName,ZoneName
+    local path = string.format('%sresources/creditnames.txt', addon.path)
+    local file = io.open(path, 'r')
+    if not file then
+        print(string.format('Could not load creditnames.txt at path: %s', path))
+        return
+    end
+
+    for line in file:lines() do
+        local fullname, zone = line:match('^(.-),(.*)$')
+        if fullname then
+            fullname = fullname:match('^%s*(.-)%s*$')
+            zone     = zone:match('^%s*(.-)%s*$')
+
+            if not creditNames[fullname] then
+                creditNames[fullname] = {}
+            end
+            if zone ~= '' and zone ~= nil then
+                table.insert(creditNames[fullname], zone)
+            end
+        end
+    end
+    file:close()
+end
+
+--------------------------------------------------------------------------------
+-- Gathering Functions
+--------------------------------------------------------------------------------
+
+-- 1) Gather from your alliance/party only:
+local function gatherAllianceData()
+    local partyMgr = AshitaCore:GetMemoryManager():GetParty()
+
+    for i = 0, 17 do
+        local name = partyMgr:GetMemberName(i)
+        if (name ~= nil and name ~= '') then
+            local zoneId   = partyMgr:GetMemberZone(i)
+            local zoneName = zoneList[zoneId] or 'UnknownZone'
+
+            local mainJobId = partyMgr:GetMemberMainJob(i)
+            local subJobId  = partyMgr:GetMemberSubJob(i)
+            local mainJob   = jobList[mainJobId] or ''
+            local subJob    = jobList[subJobId] or ''
+
+            if creditNames[pendingEventName] and has_value(creditNames[pendingEventName], zoneName) then
+                table.insert(attendanceData, {
+                    name     = name,
+                    jobsMain = mainJob,
+                    jobsSub  = subJob,
+                    zone     = zoneName,
+                    time     = os.date('%H:%M:%S')
+                })
+            end
+        end
+    end
+end
+
+-- 2) Gather from all players in range, using the old memory approach:
+local function gatherZoneData()
+    local basePointerAddr = ashita.memory.read_int32(
+        ashita.memory.find('FFXiMain.dll', 0, '??', 0x62D014, 0)
+    )
+    basePointerAddr       = basePointerAddr + 12
+    local numResults      = ashita.memory.read_int32(basePointerAddr)
+    basePointerAddr       = basePointerAddr + 20
+    local listPointerAddr = ashita.memory.read_int32(basePointerAddr)
+
+    for i = 0, (numResults - 1) do
+        local name    = ashita.memory.read_string(listPointerAddr + 0x04 + 0x4, 15)
+        local zoneId  = ashita.memory.read_uint8(listPointerAddr + 0x04 + 0x28)
+        local zone    = zoneList[zoneId] or 'UnknownZone'
+        local mainId  = ashita.memory.read_uint8(listPointerAddr + 0x04 + 0x20)
+        local subId   = ashita.memory.read_uint8(listPointerAddr + 0x04 + 0x21)
+        local mainJob = jobList[mainId] or ''
+        local subJob  = jobList[subId] or ''
+
+        if creditNames[pendingEventName] and has_value(creditNames[pendingEventName], zone) then
+            table.insert(attendanceData, {
+                name     = name,
+                jobsMain = mainJob,
+                jobsSub  = subJob,
+                zone     = zone,
+                time     = os.date('%H:%M:%S')
+            })
+        end
+
+        listPointerAddr = listPointerAddr + 76
+    end
+
+    print(string.format('Found %d characters in range (zone-based).', #attendanceData))
+end
+
+--------------------------------------------------------------------------------
+-- Writes the final attendanceData to CSV
+--------------------------------------------------------------------------------
+local function writeAttendanceFile()
+    if (not pendingFilePath) or (not pendingEventName) then
+        print('No pending file path or event name to write!')
+        return
+    end
+
+    local file = io.open(pendingFilePath, 'a')
+    if not file then
+        print('Error: Could not open attendance log file for writing: ' .. pendingFilePath)
+        return
+    end
+
+    -- Write each row of attendanceData
+    for _, row in ipairs(attendanceData) do
+        file:write(string.format('%s,%s,%s,%s,%s,%s\n',
+            row.name,
+            row.jobsMain,
+            os.date('%m/%d/%Y'),  -- date
+            os.date('%H:%M:%S'),  -- time
+            row.zone,
+            pendingEventName
+        ))
+    end
+
+    file:close()
+
+    print(string.format('Wrote %d entries to: %s', #attendanceData, pendingFilePath))
+end
+
+--------------------------------------------------------------------------------
+-- Displays the "Attendance Results" GUI
+--------------------------------------------------------------------------------
+local function ShowAttendanceWindow()
+    isAttendanceWindowOpen = true
+end
+
+--------------------------------------------------------------------------------
+-- Displays the "Help" Window
+--------------------------------------------------------------------------------
+local function ShowHelpWindow()
+    isHelpWindowOpen = true
+end
+
+-- Gathers the shortnames that match the player's current zone:
+local function gatherHelpDataForCurrentZone()
+    helpData = {}
+
+    -- Find current zone:
+    local currZoneId = ashita.memory.read_uint8(
+        ashita.memory.find('FFXiMain.dll', 0, '??', 0x452818, 0)
+    )
+    local currZone = zoneList[currZoneId] or 'UnknownZone'
+
+    -- For each shortname alias -> eventName:
+    for alias, eventName in pairs(shortNames) do
+        if creditNames[eventName] and has_value(creditNames[eventName], currZone) then
+            table.insert(helpData, { alias = alias, name = eventName })
+        end
+    end
+
+    if #helpData == 0 then
+        print(string.format('No shortnames found for your current zone: %s', currZone))
+    else
+        print(string.format('%d shortnames found for zone: %s', #helpData, currZone))
+    end
+end
+
+--------------------------------------------------------------------------------
+-- Ashita Event: unload
+--------------------------------------------------------------------------------
+ashita.events.register('unload', 'unload_cb', function()
     -- Cleanup if needed
-end);
+end)
 
-ashita.events.register('load', 'load_cb', function ()
-    for line in io.lines(addon.path .. "zones.csv") do
-        local index, name = line:match("%i*(.-),%s*(.-),")
-        table.insert(zoneList, index, name)
+--------------------------------------------------------------------------------
+-- Ashita Event: load
+--------------------------------------------------------------------------------
+ashita.events.register('load', 'load_cb', function()
+    -- Load zone data (resources folder):
+    local zpath = addon.path .. 'resources/zones.csv'
+    for line in io.lines(zpath) do
+        local index, name = line:match('%i*(.-),%s*(.-),')
+        if index and name then
+            table.insert(zoneList, index, name)
+        end
     end
 
-    for line in io.lines(addon.path .. "jobs.csv") do
-        local index, name = line:match("%i*(.-),%s*(.-),")
-        table.insert(jobList, index, name)
+    -- Load job data (resources folder):
+    local jpath = addon.path .. 'resources/jobs.csv'
+    for line in io.lines(jpath) do
+        local index, name = line:match('%i*(.-),%s*(.-),')
+        if index and name then
+            table.insert(jobList, index, name)
+        end
     end
-end);
 
-ashita.events.register('command', 'command_cb', function (e)
-    local args = e.command:args();
-    
+    -- Load short & credit names
+    loadShortNames()
+    loadCreditNames()
+end)
+
+--------------------------------------------------------------------------------
+-- Ashita Event: command
+--   /att          -> gather alliance-based, no shortAlias
+--   /att myalias  -> alliance-based, shortAlias = myalias
+--   /att ls       -> zone-based, no shortAlias
+--   /att ls xyz   -> zone-based, shortAlias = xyz
+--   /att help     -> open help window for current zone
+--------------------------------------------------------------------------------
+ashita.events.register('command', 'command_cb', function(e)
+    local args = e.command:args()
     if (#args == 0 or args[1] ~= '/att') then
-        return;
+        return
     end
 
-    if (#args >= 1) then
-        local date = os.date('*t');
-        local time = os.date("*t");
-        local printTime = os.date(("%02d.%02d.%02d"):format(time.hour, time.min, time.sec));
-        local filePath;
+    -- If the user typed "/att help" specifically, show the help window:
+    if (#args == 2 and args[2]:lower() == 'help') then
+        e.blocked = true
+        gatherHelpDataForCurrentZone()
+        ShowHelpWindow()
+        return
+    end
 
-        local isAnon = {};
-        local names = {};
-        local zones = {};
-        local jobsMain = {};
-        local jobsSub = {};
-        local jobsMainLvl = {};
-        local jobsSubLvl = {};
-        local currZone = "";
-        local pCounter = 0;
+    -- Otherwise, we do normal attendance logic:
+    -- 1) Reset old data:
+    attendanceData     = {}
+    pendingFilePath    = nil
+    pendingLSMessage   = nil
+    -- Default the mode to HNM, per your request:
+    selectedMode       = 'HNM'
+    pendingShortAlias  = nil
 
-        local basePointerAddr = ashita.memory.read_int32(ashita.memory.find('FFXiMain.dll', 0, '??', 0x62D014, 0));
-        basePointerAddr = basePointerAddr + 12;    
-        local numResults = ashita.memory.read_int32(basePointerAddr);
-        basePointerAddr = basePointerAddr + 20;
-        local listPointerAddr = ashita.memory.read_int32(basePointerAddr);
-        currZone = zoneList[ashita.memory.read_uint8(ashita.memory.find('FFXiMain.dll', 0, '??', 0x452818, 0))];
-        
-        creditNames['Current Zone'][1] = currZone;
+    -- 2) Basic date/time used for final CSV naming:
+    local time      = os.date('*t')
+    local printTime = os.date(('%02d.%02d.%02d'):format(time.hour, time.min, time.sec))
 
-        local lsMode = has_value(args, 'ls');
-        local eventMode = has_value(args, 'e');
-        local hMode = has_value(args, 'h'); -- Check for the 'h' argument
+    -- 3) Determine if "ls" is present:
+    local lsMode = false
+    local shortArg = nil
 
-        -- Set the file path based on the argument
-        if hMode then
-            filePath = addon.path .. "\\HNM Logs\\" .. os.date("%A %d %B %Y") .. " " .. printTime .. ".csv";
+    for i = 2, #args do
+        local a = args[i]
+        if a:lower() == 'ls' then
+            lsMode = true
         else
-            filePath = addon.path .. "\\Event Logs\\" .. os.date("%A %d %B %Y") .. " " .. printTime .. ".csv";
+            shortArg = a
+        end
+    end
+
+    -- 4) Resolve final event name:
+    pendingEventName = 'Current Zone'
+    if shortArg ~= nil then
+        local mapped = shortNames[shortArg:lower()]
+        if mapped then
+            pendingEventName = mapped
+        else
+            print(string.format('Alias "%s" not found in shortnames.txt; defaulting to "Current Zone".', shortArg))
+        end
+        pendingShortAlias = shortArg
+    end
+
+    -- Ensure "Current Zone" in creditNames is up to date:
+    local currZoneId = ashita.memory.read_uint8(
+        ashita.memory.find('FFXiMain.dll', 0, '??', 0x452818, 0)
+    )
+    local currZone = zoneList[currZoneId] or 'UnknownZone'
+
+    if not creditNames['Current Zone'] then
+        creditNames['Current Zone'] = {}
+    end
+    creditNames['Current Zone'][1] = currZone
+
+    -- 5) Gather data: alliance vs. zone:
+    if lsMode then
+        print('Running in zone-based (ls) mode..')
+        gatherZoneData()
+    else
+        print('Running in alliance-based mode..')
+        gatherAllianceData()
+    end
+
+    print(string.format('Loaded %d attendees. You can remove them in the GUI before writing.', #attendanceData))
+    print('When done, press "Write & Close" to finalize, or press [X]/Cancel to discard.')
+
+    -- Show the main attendance window:
+    ShowAttendanceWindow()
+end)
+
+--------------------------------------------------------------------------------
+-- Ashita Event: d3d_present
+--   Renders our windows each frame, if open.
+--------------------------------------------------------------------------------
+ashita.events.register('d3d_present', 'present_cb', function()
+    ----------------------------------------------------------------------------
+    -- 1) Attendance Window
+    ----------------------------------------------------------------------------
+    if isAttendanceWindowOpen then
+        imgui.SetNextWindowSize({1050, 600}, ImGuiCond_FirstUseEver)
+        local openPtr = { isAttendanceWindowOpen }
+        if imgui.Begin('Attendance Results', openPtr) then
+
+            -- Let user pick "HNM" or "Event" (HNM is on the left now, default).
+            imgui.Text('Select Mode:')
+            imgui.SameLine()
+            if imgui.RadioButton('HNM', (selectedMode == 'HNM')) then
+                selectedMode = 'HNM'
+            end
+            imgui.SameLine()
+            if imgui.RadioButton('Event', (selectedMode == 'Event')) then
+                selectedMode = 'Event'
+            end
+
+            imgui.Separator()
+            imgui.Text(string.format('Attendance Name: %s', pendingEventName))
+            imgui.Separator()
+
+            -- Show list of attendees
+            imgui.Text('Attendees in credited zone(s):')
+
+            local childHeight = -50
+            imgui.BeginChild('att_list_region', {0, childHeight}, true)
+
+            for i = #attendanceData, 1, -1 do
+                local row = attendanceData[i]
+                if imgui.Button('Remove##' .. tostring(i)) then
+                    table.remove(attendanceData, i)
+                end
+                imgui.SameLine()
+                imgui.Text(string.format('%s (%s | %s/%s)',
+                    row.name, row.zone, row.jobsMain, row.jobsSub
+                ))
+            end
+
+            imgui.EndChild()
+            imgui.Separator()
+
+            -- "Write & Close" button
+            if imgui.Button('Write & Close') then
+                local dateStr = os.date('%A %d %B %Y')
+                local timeStr = os.date('%H.%M.%S')
+
+                if selectedMode == 'HNM' then
+                    pendingFilePath  = string.format('%sHNM Logs\\%s %s.csv', addon.path, dateStr, timeStr)
+                    pendingLSMessage = string.format('HNM Attendance has been taken for: %s', pendingEventName)
+                else
+                    -- Event mode
+                    pendingFilePath  = string.format('%sEvent Logs\\%s %s.csv', addon.path, dateStr, timeStr)
+                    pendingLSMessage = string.format('Event Attendance has been taken for: %s', pendingEventName)
+                end
+
+                -- 1) Write CSV
+                writeAttendanceFile()
+
+                -- 2) Send LS message
+                if (pendingLSMessage ~= nil) then
+                    AshitaCore:GetChatManager():QueueCommand(1, '/l ' .. pendingLSMessage)
+                    coroutine.sleep(1.5)
+                end
+
+                -- 3) Close window
+                isAttendanceWindowOpen = false
+            end
+
+            imgui.SameLine()
+
+            -- "Cancel"
+            if imgui.Button('Cancel') then
+                isAttendanceWindowOpen = false
+                print('Canceled attendance writing. No linkshell message was sent.')
+            end
+
+            imgui.End()
         end
 
-        local file = io.open(filePath, "a");
-
-        -- Determine the start index and mode
-        local startIndex = 0;
-        if (#args == 1) then
-            print("Running in basic mode.");
-            startIndex = 1;
-            numResults = numResults + 2;
-        elseif (lsMode) then
-            print("Running in LS mode. LS mode supports over 40 players.");
-            startIndex = 0;
+        -- If user clicked the [X] in the corner:
+        if not openPtr[1] then
+            isAttendanceWindowOpen = false
+            print('Window closed without writing or sending LS message.')
         end
-        
-        local eventName = 'Current Zone';
-        if (eventMode or hMode) then -- Check for both event mode and hMode
-            eventName = value_index(args, 'e');
-            if has_value(args, 'h') then
-                eventName = value_index(args, 'h');
+    end
+
+    ----------------------------------------------------------------------------
+    -- 2) Help Window
+    ----------------------------------------------------------------------------
+    if isHelpWindowOpen then
+        local helpOpenPtr = { isHelpWindowOpen }
+        if imgui.Begin('Attendance Help - Current Zone', helpOpenPtr) then
+            imgui.Text('Shortnames that match your current zone:')
+            imgui.Separator()
+
+            local childHeight = -30
+            imgui.BeginChild('help_list_region', {0, childHeight}, true)
+
+            for _, entry in ipairs(helpData) do
+                imgui.Text(string.format('Alias: %s   ->   %s', entry.alias, entry.name))
             end
-            eventName = eventName + 1; -- Move to the actual event name
-            local shortName = args[eventName]; -- Get the short name argument
-            eventName = shortNames[shortName]; -- Get the full event name
-            
-            print("Running in event mode.");
-            if eventName then
-                -- Determine the message based on the command used
-                local messagePrefix = hMode and "HNM Attendance has been taken for: " or "Event Attendance has been taken for: ";
-                local message = messagePrefix .. eventName;
-                
-                AshitaCore:GetChatManager():QueueCommand(1, '/l ' .. message)
-                coroutine.sleep(1.5);
-            else
-                print("Invalid event name specified.");
+
+            imgui.EndChild()
+
+            if imgui.Button('Close##help') then
+                isHelpWindowOpen = false
             end
-        end;
-        
-        print("Eligible zones for attendance: ");
-        for i = 1, #creditNames[eventName], 1 do
-            print(creditNames[eventName][i]);
-        end;
-        
-        if (numResults > 40) then
-            if (lsMode == false) then
-                print("Error: Search results, and therefore attendance data, is truncated! Use the linkshell mode along with the linkshell menu instead (/att ls).");
-            end;
-        end;
 
-        for i = startIndex, numResults, 1 do
-            if (i == numResults) then break; end;
-            
-            isAnon[i] = ashita.memory.read_int8(0x04 + listPointerAddr + 0x0); -- 7F: normal, 43: anon
+            imgui.End()
+        end
 
-            names[i] = ashita.memory.read_string(0x04 + listPointerAddr + 0x4, 15); -- length 13, names get truncated!
-            zones[i] = zoneList[ashita.memory.read_uint8(0x04 + listPointerAddr + 0x28)]; -- zoneID file included
-            
-            jobsMain[i] = jobList[ashita.memory.read_uint8(0x04 + listPointerAddr + 0x20)];
-            jobsSub[i] = jobList[ashita.memory.read_uint8(0x04 + listPointerAddr + 0x21)];    
-            
-            jobsMainLvl[i] = ashita.memory.read_uint8(0x04 + listPointerAddr + 0x22);
-            jobsSubLvl[i] = ashita.memory.read_uint8(0x04 + listPointerAddr + 0x23);    
-
-            if (has_value(creditNames[eventName], zones[i])) then
-                pCounter = pCounter + 1;
-                file:write(names[i] .. "," .. jobsMain[i] .. "," .. os.date("%m/%d/%Y") .. "," .. os.date(("%02d:%02d:%02d"):format(time.hour, time.min, time.sec)) .. "," .. zones[i] .. "," .. eventName .. "\n");
-            end;
-            
-            listPointerAddr = listPointerAddr + 76; -- each entry is 76 bytes large
-        end;        
-
-        print(pCounter .. " players accounted for.");
-        print("Attendance Filename: " .. os.date("%A %d %B %Y") .. " " .. os.date(("%02d:%02d:%02d"):format(time.hour, time.min, time.sec)) .. ".csv");
-
-        file:close();
-        return;
-    end;
-end);
+        if not helpOpenPtr[1] then
+            isHelpWindowOpen = false
+        end
+    end
+end)
