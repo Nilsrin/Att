@@ -1,5 +1,5 @@
 addon.name      = 'att'
-addon.author    = 'literallywho, edited by Nils, further modified by ChatGPT'
+addon.author    = 'literallywho, edited by Nils'
 addon.version   = '2.1'
 addon.desc      = 'Takes attendance; user can remove entries before writing; LS message on finalize.'
 
