@@ -1,3 +1,6 @@
+----------------------------------------------------------------------------------------------------
+--  ATTENDANCE ADDON (Ashita v4)
+----------------------------------------------------------------------------------------------------
 addon.name      = 'att'
 addon.author    = 'literallywho, edited by Nils'
 addon.version   = '2.1'
@@ -8,40 +11,31 @@ local imgui = require('imgui')
 local chat  = require('chat')
 
 --------------------------------------------------------------------------------
--- Global / top-level variables
+-- Global variables
 --------------------------------------------------------------------------------
 
--- Resource tables (populated at load time).
 local zoneList    = {}
 local jobList     = {}
 local shortNames  = {}
 local creditNames = {}
+local gdi         = require('gdifonts.include')
 
--- GUI / Attendance state:
+-- [LS2 FIX] We add a global to remember if user typed ls or ls2:
+local g_LSMode = nil  -- can be 'ls', 'ls2', or nil
+
 local isAttendanceWindowOpen = false
+local isHelpWindowOpen       = false
+local helpData               = {}
 
--- Help Window state:
-local isHelpWindowOpen  = false
-local helpData          = {}   -- { { alias = 'xxx', name = 'Full Event Name' }, ... }
+local attendanceData   = {}
+local pendingEventName = nil
+local pendingShortAlias = nil
 
--- The data we plan to write. Each element: { name, jobsMain, jobsSub, zone, time }
-local attendanceData = {}
+-- Instead of deciding "HNM" or "Event" from commands, user picks it in GUI.
+local selectedMode     = 'HNM'  -- can be 'Event' or 'HNM'
 
--- We'll store the final event name the user is "taking attendance for."
-local pendingEventName   = nil
-
--- We store the shortName the user typed (if any).
-local pendingShortAlias  = nil
-
--- Instead of deciding "HNM" or "Event" from commands, user picks it in GUI:
--- (HNM is now the default, per your request!)
-local selectedMode = 'HNM'  -- can be 'Event' or 'HNM'
-
--- We build the CSV path on finalize:
-local pendingFilePath    = nil
-
--- We build the LS message on finalize:
-local pendingLSMessage   = nil
+local pendingFilePath  = nil
+local pendingLSMessage = nil
 
 --------------------------------------------------------------------------------
 -- Helpers
@@ -61,7 +55,6 @@ end
 --------------------------------------------------------------------------------
 
 local function loadShortNames()
-    -- Format (shortnames.txt):  alias,Full Event Name
     local path = string.format('%sresources/shortnames.txt', addon.path)
     local file = io.open(path, 'r')
     if not file then
@@ -72,7 +65,7 @@ local function loadShortNames()
     for line in file:lines() do
         local alias, fullname = line:match('^(.-),(.*)$')
         if alias and fullname then
-            alias    = alias:match('^%s*(.-)%s*$')      -- trim
+            alias    = alias:match('^%s*(.-)%s*$')
             fullname = fullname:match('^%s*(.-)%s*$')
             shortNames[alias:lower()] = fullname
         end
@@ -81,7 +74,6 @@ local function loadShortNames()
 end
 
 local function loadCreditNames()
-    -- Format (creditnames.txt): FullEventName,ZoneName
     local path = string.format('%sresources/creditnames.txt', addon.path)
     local file = io.open(path, 'r')
     if not file then
@@ -110,10 +102,8 @@ end
 -- Gathering Functions
 --------------------------------------------------------------------------------
 
--- 1) Gather from your alliance/party only:
 local function gatherAllianceData()
     local partyMgr = AshitaCore:GetMemoryManager():GetParty()
-
     for i = 0, 17 do
         local name = partyMgr:GetMemberName(i)
         if (name ~= nil and name ~= '') then
@@ -138,7 +128,6 @@ local function gatherAllianceData()
     end
 end
 
--- 2) Gather from all players in range, using the old memory approach:
 local function gatherZoneData()
     local basePointerAddr = ashita.memory.read_int32(
         ashita.memory.find('FFXiMain.dll', 0, '??', 0x62D014, 0)
@@ -188,48 +177,40 @@ local function writeAttendanceFile()
         return
     end
 
-    -- Write each row of attendanceData
     for _, row in ipairs(attendanceData) do
         file:write(string.format('%s,%s,%s,%s,%s,%s\n',
             row.name,
             row.jobsMain,
-            os.date('%m/%d/%Y'),  -- date
-            os.date('%H:%M:%S'),  -- time
+            os.date('%m/%d/%Y'),
+            os.date('%H:%M:%S'),
             row.zone,
             pendingEventName
         ))
     end
 
     file:close()
-
     print(string.format('Wrote %d entries to: %s', #attendanceData, pendingFilePath))
 end
 
 --------------------------------------------------------------------------------
--- Displays the "Attendance Results" GUI
+-- GUI helpers
 --------------------------------------------------------------------------------
 local function ShowAttendanceWindow()
     isAttendanceWindowOpen = true
 end
 
---------------------------------------------------------------------------------
--- Displays the "Help" Window
---------------------------------------------------------------------------------
 local function ShowHelpWindow()
     isHelpWindowOpen = true
 end
 
--- Gathers the shortnames that match the player's current zone:
 local function gatherHelpDataForCurrentZone()
     helpData = {}
 
-    -- Find current zone:
     local currZoneId = ashita.memory.read_uint8(
         ashita.memory.find('FFXiMain.dll', 0, '??', 0x452818, 0)
     )
     local currZone = zoneList[currZoneId] or 'UnknownZone'
 
-    -- For each shortname alias -> eventName:
     for alias, eventName in pairs(shortNames) do
         if creditNames[eventName] and has_value(creditNames[eventName], currZone) then
             table.insert(helpData, { alias = alias, name = eventName })
@@ -244,17 +225,14 @@ local function gatherHelpDataForCurrentZone()
 end
 
 --------------------------------------------------------------------------------
--- Ashita Event: unload
+-- Ashita Events
 --------------------------------------------------------------------------------
 ashita.events.register('unload', 'unload_cb', function()
-    -- Cleanup if needed
+    -- cleanup if needed
 end)
 
---------------------------------------------------------------------------------
--- Ashita Event: load
---------------------------------------------------------------------------------
 ashita.events.register('load', 'load_cb', function()
-    -- Load zone data (resources folder):
+    -- Load zone data
     local zpath = addon.path .. 'resources/zones.csv'
     for line in io.lines(zpath) do
         local index, name = line:match('%i*(.-),%s*(.-),')
@@ -263,7 +241,7 @@ ashita.events.register('load', 'load_cb', function()
         end
     end
 
-    -- Load job data (resources folder):
+    -- Load job data
     local jpath = addon.path .. 'resources/jobs.csv'
     for line in io.lines(jpath) do
         local index, name = line:match('%i*(.-),%s*(.-),')
@@ -272,112 +250,131 @@ ashita.events.register('load', 'load_cb', function()
         end
     end
 
-    -- Load short & credit names
     loadShortNames()
     loadCreditNames()
 end)
 
---------------------------------------------------------------------------------
--- Ashita Event: command
---   /att          -> gather alliance-based, no shortAlias
---   /att myalias  -> alliance-based, shortAlias = myalias
---   /att ls       -> zone-based, no shortAlias
---   /att ls xyz   -> zone-based, shortAlias = xyz
---   /att help     -> open help window for current zone
---------------------------------------------------------------------------------
 ashita.events.register('command', 'command_cb', function(e)
     local args = e.command:args()
-    if (#args == 0 or args[1] ~= '/att') then
+    if (#args == 0 or args[1]:lower() ~= '/att') then
         return
     end
 
-    -- If the user typed "/att help" specifically, show the help window:
+    e.blocked = true
+
     if (#args == 2 and args[2]:lower() == 'help') then
-        e.blocked = true
         gatherHelpDataForCurrentZone()
         ShowHelpWindow()
         return
     end
 
-    -- Otherwise, we do normal attendance logic:
-    -- 1) Reset old data:
     attendanceData     = {}
     pendingFilePath    = nil
     pendingLSMessage   = nil
-    -- Default the mode to HNM, per your request:
     selectedMode       = 'HNM'
     pendingShortAlias  = nil
 
-    -- 2) Basic date/time used for final CSV naming:
     local time      = os.date('*t')
     local printTime = os.date(('%02d.%02d.%02d'):format(time.hour, time.min, time.sec))
 
-    -- 3) Determine if "ls" is present:
-    local lsMode = false
-    local shortArg = nil
+    -- [LS2 FIX] local variable
+    local lsMode          = nil
+    local directWriteMode = nil
+    local shortArg        = nil
 
     for i = 2, #args do
-        local a = args[i]
-        if a:lower() == 'ls' then
-            lsMode = true
+        local a = args[i]:lower()
+        if a == 'ls' then
+            lsMode = 'ls'
+        elseif a == 'ls2' then
+            lsMode = 'ls2'  -- store it
+        elseif a == 'h' then
+            directWriteMode = 'HNM'
+        elseif a == 'e' then
+            directWriteMode = 'Event'
         else
             shortArg = a
         end
     end
 
-    -- 4) Resolve final event name:
+    -- [LS2 FIX] Store lsMode in the global so we can use it in the GUI:
+    g_LSMode = lsMode
+
     pendingEventName = 'Current Zone'
     if shortArg ~= nil then
         local mapped = shortNames[shortArg:lower()]
         if mapped then
             pendingEventName = mapped
         else
-            print(string.format('Alias "%s" not found in shortnames.txt; defaulting to "Current Zone".', shortArg))
+            print(string.format(
+                'Alias "%s" not found in shortnames.txt; defaulting event name to "Current Zone".',
+                shortArg
+            ))
         end
         pendingShortAlias = shortArg
     end
 
-    -- Ensure "Current Zone" in creditNames is up to date:
     local currZoneId = ashita.memory.read_uint8(
         ashita.memory.find('FFXiMain.dll', 0, '??', 0x452818, 0)
     )
     local currZone = zoneList[currZoneId] or 'UnknownZone'
-
     if not creditNames['Current Zone'] then
         creditNames['Current Zone'] = {}
     end
     creditNames['Current Zone'][1] = currZone
 
-    -- 5) Gather data: alliance vs. zone:
-    if lsMode then
-        print('Running in zone-based (ls) mode..')
+    if lsMode == 'ls' or lsMode == 'ls2' then
+        print('Running in zone-based mode..')
         gatherZoneData()
     else
         print('Running in alliance-based mode..')
         gatherAllianceData()
     end
 
-    print(string.format('Loaded %d attendees. You can remove them in the GUI before writing.', #attendanceData))
-    print('When done, press "Write & Close" to finalize, or press [X]/Cancel to discard.')
+    print(string.format('Loaded %d attendees.', #attendanceData))
 
-    -- Show the main attendance window:
+    -- If user used h/e, skip GUI
+    if directWriteMode ~= nil then
+        selectedMode = directWriteMode
+
+        local dateStr = os.date('%A %d %B %Y')
+        local timeStr = os.date('%H.%M.%S')
+
+        if selectedMode == 'HNM' then
+            pendingFilePath  = string.format('%sHNM Logs\\%s %s.csv', addon.path, dateStr, timeStr)
+            pendingLSMessage = string.format('HNM Attendance has been taken for: %s', pendingEventName)
+        else
+            pendingFilePath  = string.format('%sEvent Logs\\%s %s.csv', addon.path, dateStr, timeStr)
+            pendingLSMessage = string.format('Event Attendance has been taken for: %s', pendingEventName)
+        end
+
+        writeAttendanceFile()
+
+        if (pendingLSMessage ~= nil) then
+            -- [LS2 FIX] check lsMode
+            if lsMode == 'ls2' then
+                AshitaCore:GetChatManager():QueueCommand(1, '/l2 ' .. pendingLSMessage)
+            else
+                AshitaCore:GetChatManager():QueueCommand(1, '/l ' .. pendingLSMessage)
+            end
+        end
+
+        return
+    end
+
+    print('Open the GUI to remove entries or finalize writing. Use "Write & Close" button in the UI.')
     ShowAttendanceWindow()
 end)
 
 --------------------------------------------------------------------------------
--- Ashita Event: d3d_present
---   Renders our windows each frame, if open.
+-- d3d_present (the GUI rendering)
 --------------------------------------------------------------------------------
 ashita.events.register('d3d_present', 'present_cb', function()
-    ----------------------------------------------------------------------------
-    -- 1) Attendance Window
-    ----------------------------------------------------------------------------
     if isAttendanceWindowOpen then
         imgui.SetNextWindowSize({1050, 600}, ImGuiCond_FirstUseEver)
         local openPtr = { isAttendanceWindowOpen }
         if imgui.Begin('Attendance Results', openPtr) then
 
-            -- Let user pick "HNM" or "Event" (HNM is on the left now, default).
             imgui.Text('Select Mode:')
             imgui.SameLine()
             if imgui.RadioButton('HNM', (selectedMode == 'HNM')) then
@@ -392,8 +389,7 @@ ashita.events.register('d3d_present', 'present_cb', function()
             imgui.Text(string.format('Attendance Name: %s', pendingEventName))
             imgui.Separator()
 
-            -- Show list of attendees
-            imgui.Text('Attendees in credited zone(s):')
+            imgui.Text(string.format('Attendees in credited zone(s): %d', #attendanceData))
 
             local childHeight = -50
             imgui.BeginChild('att_list_region', {0, childHeight}, true)
@@ -412,7 +408,6 @@ ashita.events.register('d3d_present', 'present_cb', function()
             imgui.EndChild()
             imgui.Separator()
 
-            -- "Write & Close" button
             if imgui.Button('Write & Close') then
                 local dateStr = os.date('%A %d %B %Y')
                 local timeStr = os.date('%H.%M.%S')
@@ -421,27 +416,27 @@ ashita.events.register('d3d_present', 'present_cb', function()
                     pendingFilePath  = string.format('%sHNM Logs\\%s %s.csv', addon.path, dateStr, timeStr)
                     pendingLSMessage = string.format('HNM Attendance has been taken for: %s', pendingEventName)
                 else
-                    -- Event mode
                     pendingFilePath  = string.format('%sEvent Logs\\%s %s.csv', addon.path, dateStr, timeStr)
                     pendingLSMessage = string.format('Event Attendance has been taken for: %s', pendingEventName)
                 end
 
-                -- 1) Write CSV
                 writeAttendanceFile()
 
-                -- 2) Send LS message
                 if (pendingLSMessage ~= nil) then
-                    AshitaCore:GetChatManager():QueueCommand(1, '/l ' .. pendingLSMessage)
+                    -- [LS2 FIX] Now we check the global g_LSMode to decide /l or /l2
+                    if g_LSMode == 'ls2' then
+                        AshitaCore:GetChatManager():QueueCommand(1, '/l2 ' .. pendingLSMessage)
+                    else
+                        -- If g_LSMode == 'ls' or nil, use normal /l
+                        AshitaCore:GetChatManager():QueueCommand(1, '/l ' .. pendingLSMessage)
+                    end
                     coroutine.sleep(1.5)
                 end
 
-                -- 3) Close window
                 isAttendanceWindowOpen = false
             end
 
             imgui.SameLine()
-
-            -- "Cancel"
             if imgui.Button('Cancel') then
                 isAttendanceWindowOpen = false
                 print('Canceled attendance writing. No linkshell message was sent.')
@@ -450,16 +445,12 @@ ashita.events.register('d3d_present', 'present_cb', function()
             imgui.End()
         end
 
-        -- If user clicked the [X] in the corner:
         if not openPtr[1] then
             isAttendanceWindowOpen = false
             print('Window closed without writing or sending LS message.')
         end
     end
 
-    ----------------------------------------------------------------------------
-    -- 2) Help Window
-    ----------------------------------------------------------------------------
     if isHelpWindowOpen then
         local helpOpenPtr = { isHelpWindowOpen }
         if imgui.Begin('Attendance Help - Current Zone', helpOpenPtr) then
