@@ -1,0 +1,27 @@
+King Arthro:
+Required:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner
+Suggested:
+
+King Vinegarroon:
+Required:
+1: Tank
+1: Support
+1: THF
+1: Stunner
+Suggested:
+1: WHM
+
+Serket:
+Required:
+1: THF
+1: WHM, RDM, SMN
+
+Simurgh:
+Required:
+1: THF
+1: WHM, RDM, SMN
+
