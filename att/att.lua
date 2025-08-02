@@ -1,19 +1,24 @@
 --  ATTENDANCE ADDON (Ashita v4) — with Self-Attendance and Composition
 addon.name      = 'att'
-addon.author    = 'literallywho, edited by Nils'
-addon.version   = '2.15'
+addon.author    = 'Nils'
+addon.version   = '2.2'
 addon.desc      = 'Attendance manager'
-
 
 require('common')
 local imgui   = require('imgui')
 local chat    = require('chat')
 local struct  = require('struct')
 
-local zoneList              = {}
-local jobList               = {}
-local shortNames            = {}
-local creditNames           = {}
+-- Shared data split for attendance and composition
+local attZoneList           = {}
+local attJobList            = {}
+local attShortNames         = {}
+local attCreditNames        = {}
+
+local compZoneList          = {}
+local compJobList           = {}
+local compShortNames        = {}
+local compCreditNames       = {}
 
 local zoneRoster            = {}
 local g_LSMode              = nil
@@ -112,12 +117,12 @@ local function buildCreditRoster()
         local name = ashita.memory.read_string(ptr + 0x08, 15)
         if name ~= '' then
             local zid   = ashita.memory.read_uint8(ptr + 0x2C)
-            local zname = zoneList[zid] or 'UnknownZone'
-            if creditNames[pendingEventName]
-               and has_value(creditNames[pendingEventName], zname)
+            local zname = attZoneList[zid] or 'UnknownZone'
+            if attCreditNames[pendingEventName]
+               and has_value(attCreditNames[pendingEventName], zname)
             then
-                local mj = jobList[ashita.memory.read_uint8(ptr + 0x24)] or 'NONE'
-                local sj = jobList[ashita.memory.read_uint8(ptr + 0x25)] or 'NONE'
+                local mj = attJobList[ashita.memory.read_uint8(ptr + 0x24)] or 'NONE'
+                local sj = attJobList[ashita.memory.read_uint8(ptr + 0x25)] or 'NONE'
                 zoneRoster[name] = {
                     jobsMain = mj,
                     jobsSub  = sj,
@@ -131,46 +136,46 @@ local function buildCreditRoster()
         table.length(zoneRoster)))
 end
 
-local function loadShortNames()
-    for line in io.lines(addon.path .. 'resources/shortnames.txt') do
-        local alias, fullname = line:match('^(.-),(.*)$')
-        if alias and fullname then
-            alias    = alias:match('^%s*(.-)%s*$'):lower()
-            fullname = fullname:match('^%s*(.-)%s*$')
-            shortNames[alias] = fullname
-        end
-    end
-end
-
-local function loadCreditNames()
-    for line in io.lines(addon.path .. 'resources/creditnames.txt') do
-        local ev, zone = line:match('^(.-),(.*)$')
-        if ev then
-            ev   = ev:match('^%s*(.-)%s*$')
-            zone = zone:match('^%s*(.-)%s*$')
-            creditNames[ev] = creditNames[ev] or {}
-            if zone ~= '' then
-                table.insert(creditNames[ev], zone)
-            end
-        end
-    end
-end
-
 ashita.events.register('load', 'load_cb', function()
     for line in io.lines(addon.path .. 'resources/zones.csv') do
         local idx, nm = line:match('^(%d+),%s*(.-),')
         if idx and nm then
-            zoneList[tonumber(idx)] = nm
+            attZoneList[tonumber(idx)] = nm
+            compZoneList[tonumber(idx)] = nm
         end
     end
+
     for line in io.lines(addon.path .. 'resources/jobs.csv') do
         local idx, nm = line:match('^(%d+),%s*(.-),')
         if idx and nm then
-            jobList[tonumber(idx)] = nm
+            attJobList[tonumber(idx)] = nm
+            compJobList[tonumber(idx)] = nm
         end
     end
-    loadShortNames()
-    loadCreditNames()
+
+    for line in io.lines(addon.path .. 'resources/shortnames.txt') do
+        local alias, fullname = line:match('^(.-),(.*)$')
+        if alias and fullname then
+            alias = alias:match('^%s*(.-)%s*$'):lower()
+            fullname = fullname:match('^%s*(.-)%s*$')
+            attShortNames[alias]  = fullname
+            compShortNames[alias] = fullname
+        end
+    end
+
+    for line in io.lines(addon.path .. 'resources/creditnames.txt') do
+        local ev, zone = line:match('^(.-),(.*)$')
+        if ev then
+            ev = ev:match('^%s*(.-)%s*$')
+            zone = zone:match('^%s*(.-)%s*$')
+            attCreditNames[ev]  = attCreditNames[ev] or {}
+            compCreditNames[ev] = compCreditNames[ev] or {}
+            if zone ~= '' then
+                table.insert(attCreditNames[ev], zone)
+                table.insert(compCreditNames[ev], zone)
+            end
+        end
+    end
 end)
 
 local function gatherAllianceData()
@@ -179,14 +184,14 @@ local function gatherAllianceData()
         local name = pm:GetMemberName(i)
         if name ~= '' then
             local zid   = pm:GetMemberZone(i)
-            local zname = zoneList[zid] or 'UnknownZone'
-            if creditNames[pendingEventName]
-               and has_value(creditNames[pendingEventName], zname)
+            local zname = attZoneList[zid] or 'UnknownZone'
+            if attCreditNames[pendingEventName]
+               and has_value(attCreditNames[pendingEventName], zname)
             then
                 table.insert(attendanceData, {
                     name     = name,
-                    jobsMain = jobList[pm:GetMemberMainJob(i)] or 'NONE',
-                    jobsSub  = jobList[pm:GetMemberSubJob(i)]  or 'NONE',
+                    jobsMain = attJobList[pm:GetMemberMainJob(i)] or 'NONE',
+                    jobsSub  = attJobList[pm:GetMemberSubJob(i)]  or 'NONE',
                     zone     = zname,
                     time     = os.date('%H:%M:%S')
                 })
@@ -204,14 +209,14 @@ local function gatherZoneData()
     for i = 0, count - 1 do
         local name  = ashita.memory.read_string(ptr + 0x08, 15)
         local zid   = ashita.memory.read_uint8(ptr + 0x2C)
-        local zname = zoneList[zid] or 'UnknownZone'
-        if creditNames[pendingEventName]
-           and has_value(creditNames[pendingEventName], zname)
+        local zname = attZoneList[zid] or 'UnknownZone'
+        if attCreditNames[pendingEventName]
+           and has_value(attCreditNames[pendingEventName], zname)
         then
             table.insert(attendanceData, {
                 name     = name,
-                jobsMain = jobList[ashita.memory.read_uint8(ptr + 0x24)] or 'NONE',
-                jobsSub  = jobList[ashita.memory.read_uint8(ptr + 0x25)] or 'NONE',
+                jobsMain = attJobList[ashita.memory.read_uint8(ptr + 0x24)] or 'NONE',
+                jobsSub  = attJobList[ashita.memory.read_uint8(ptr + 0x25)] or 'NONE',
                 zone     = zname,
                 time     = os.date('%H:%M:%S')
             })
@@ -263,9 +268,10 @@ ashita.events.register('packet_in', 'sa_packet_in', function(e)
             local zid   = ashita.memory.read_uint8(
                 ashita.memory.find('FFXiMain.dll', 0, '??', 0x452818, 0)
             )
-            local zname = zoneList[zid] or 'UnknownZone'
-            if not (creditNames[pendingEventName]
-                   and has_value(creditNames[pendingEventName], zname))
+           local zname = attZoneList[zid] or 'UnknownZone'
+			if not (attCreditNames[pendingEventName]
+					and has_value(attCreditNames[pendingEventName], zname))
+
             then return end
             for _, row in ipairs(attendanceData) do
                 if row.name == ('X ' .. char) then
@@ -278,13 +284,14 @@ ashita.events.register('packet_in', 'sa_packet_in', function(e)
     end
 
     if cmd:match('^!addme') then
-        for _, row in ipairs(attendanceData) do
-            if row.name == char then return end
-        end
+			for _, row in ipairs(attendanceData) do
+				if row.name:gsub("^X ", ""):lower() == char:lower() then return end
+			end
+
         local zid   = ashita.memory.read_uint8(
             ashita.memory.find('FFXiMain.dll', 0, '??', 0x452818, 0)
         )
-        local zname = zoneList[zid] or 'UnknownZone'
+        local zname = attZoneList[zid] or 'UnknownZone'
         table.insert(attendanceData, {
             name     = char,
             jobsMain = 'IN',
@@ -328,15 +335,17 @@ ashita.events.register('command', 'command_cb', function(e)
     g_LSMode = lsMode
 
     if alias then
-        pendingEventName = shortNames[alias] or alias
-    else
-        pendingEventName = 'Current Zone'
-    end
+		pendingEventName = attShortNames[alias] or alias
+	else
+		pendingEventName = 'Current Zone'
+	end
+
     local zid = ashita.memory.read_uint8(
         ashita.memory.find('FFXiMain.dll', 0, '??', 0x452818, 0)
     )
-    creditNames['Current Zone'] = creditNames['Current Zone'] or {}
-    creditNames['Current Zone'][1] = zoneList[zid] or 'UnknownZone'
+    attCreditNames['Current Zone'] = attCreditNames['Current Zone'] or {}
+	attCreditNames['Current Zone'][1] = attZoneList[zid] or 'UnknownZone'
+
 
     if saFlag then
 		loadSATimers()
@@ -475,11 +484,13 @@ ashita.events.register('d3d_present', 'present_cb', function()
 					for name, info in pairs(zoneRoster) do
 						local exists = false
 						for _, row in ipairs(attendanceData) do
-							if row.name == name or row.name == ('X ' .. name) then
-								exists = true
-								break
-							end
-						end
+							local cleanRowName = row.name:gsub("^X ", ""):lower()
+							if cleanRowName == name:lower() then
+						exists = true
+						break
+					end
+				end
+
 				if not exists then
 					table.insert(attendanceData, {
 						name     = name,
@@ -508,8 +519,14 @@ ashita.events.register('d3d_present', 'present_cb', function()
             if imgui.RadioButton('Event',  selectedMode=='Event') then selectedMode='Event' end
 
             imgui.Separator()
-            imgui.Text('Attendance for: ' .. pendingEventName)
-            imgui.Separator()
+			imgui.Text('Attendance for: ' .. pendingEventName)
+
+			-- Show zone associated with this event
+			local creditZone = attCreditNames[pendingEventName] and attCreditNames[pendingEventName][1] or "UnknownZone"
+			imgui.Text('Credit Zone: ' .. creditZone)
+
+			imgui.Separator()
+
             imgui.Text('Attendees: ' .. #attendanceData)
 
             imgui.BeginChild('att_list', {0, -50}, true)
@@ -609,12 +626,12 @@ local function gatherCompData(compName)
     for i = 0, (numResults - 1) do
         local name = ashita.memory.read_string(listPointerAddr + 0x04 + 0x4, 15)
         local zoneId = ashita.memory.read_uint8(listPointerAddr + 0x04 + 0x28)
-        local zone = zoneList[zoneId] or "UnknownZone"
+        local zone = compZoneList[zoneId] or "UnknownZone"
         local mainId = ashita.memory.read_uint8(listPointerAddr + 0x04 + 0x20)
         local subId = ashita.memory.read_uint8(listPointerAddr + 0x04 + 0x21)
-        local mainJob = jobList[mainId] or ""
-        local subJob = jobList[subId] or ""
-        if creditNames[compName] and has_value(creditNames[compName], zone) then
+        local mainJob = compJobList[mainId] or ""
+        local subJob = compJobList[subId] or ""
+        if compCreditNames[compName] and has_value(compCreditNames[compName], zone) then
             table.insert(data, {
                 name     = name,
                 jobsMain = mainJob,
@@ -661,9 +678,9 @@ ashita.events.register('command', 'comp_command_cb', function(e)
         return
     end
     local compAlias = args[2]:lower()
-    local compName = shortNames[compAlias] or compAlias
-    g_compName = compName
-    g_compData = gatherCompData(compName)
+	local compName = compShortNames[compAlias] or compAlias
+	g_compName = compName
+	g_compData = gatherCompData(compName)
     g_compBreakdown = {
         ["Tanks"] = {},
         ["Supports"] = {},
@@ -682,8 +699,8 @@ ashita.events.register('command', 'comp_command_cb', function(e)
         end
     end
     local currZoneId = ashita.memory.read_uint8(ashita.memory.find("FFXiMain.dll", 0, "??", 0x452818, 0))
-    local currZone = zoneList[currZoneId] or "UnknownZone"
-    creditNames[compName] = { currZone }
+	local currZone = compZoneList[currZoneId] or "UnknownZone"
+	compCreditNames[compName] = { currZone }
     compWindowOpen.value = true
 end)
 
@@ -894,4 +911,3 @@ ashita.events.register('d3d_present', 'help_present_cb', function()
         isHelpWindowOpen = false
     end
 end)
-
