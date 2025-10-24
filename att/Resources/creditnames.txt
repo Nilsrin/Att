@@ -1,48 +1,56 @@
 Current Zone,
-Fafnir/Nidhogg,Dragons_Aery
-Jormungand,Uleguerand_Range
-Shikigami Weapon,RoMaeve
-Tiamat,Attohwa_Chasm
-Vrtra,King_Ranperres_Tomb
-King Arthro,Jugner_Forest
-King Vinegarroon,Western_Altepa_Desert
-(King) Behemoth,Behemoths_Dominion
-Aspidochelone/Adamantoise,Valley_of_Sorrows
+
+-- HNMS,
+Fafnir/Nidhogg,Dragons_Aery,dragonaery
+(King) Behemoth,Behemoths_Dominion,behemotdom
+Aspidochelone/Adamantoise,Valley_of_Sorrows,sorrowvall
+Jormungand,Uleguerand_Range,uleguerand
+Tiamat,Attohwa_Chasm,attohwacsm
+Vrtra,King_Ranperres_Tomb,ranpstomb
+
+-- NMS,
+Shikigami Weapon,RoMaeve,romaeve
+King Arthro,Jugner_Forest,jugner
+King Vinegarroon,Western_Altepa_Desert,westaltepa
+Bloodsucker,Bostaunieux_Oubliette,bostaunieu
+Simurgh,Rolanberry_Fields,rolanberry
+Xolotl,Attohwa_Chasm,attohwacsm
+Serket,Garlaige_Citadel,garlaige
+
+-- HENMs,
+Overlord Arthro,Jugner_Forest,jugner
+Ruinous Rocs,Rolanberry_Fields,rolanberry
+Sacred Scorpions,Sauromugue_Champaign,sauromugue
+Mammet-9999,Misareaux_Coast,misareaux
+Ultimega,Lufaise_Meadows,lufaisemds
+Tonberry Sovereign,Yhoator_Jungle,yhoator
+
+-- Events,
 Sky/Kirin,The_Celestial_Nexus
 Sky/Kirin,Stellar_Fulcrum
 Sky/Kirin,LaLoff_Amphitheater
-Sky/Kirin,VeLugannon_Palace
-Sky/Kirin,The_Shrine_of_RuAvitau
-Sky/Kirin,RuAun_Gardens
-Dynamis,Dynamis-Jeuno
-Dynamis,Dynamis-Windurst
-Dynamis,Dynamis-Bastok
-Dynamis,Dynamis-San_dOria
-Dynamis,Dynamis-Xarcabard
-Dynamis,Dynamis-Beaucedine
-Dynamis,Dynamis-Tavnazia
-Dynamis,Dynamis-Qufim
-Dynamis,Dynamis-Buburimu
-Dynamis,Dynamis-Valkurm
-Bloodsucker,Bostaunieux_Oubliette
-Simurgh,Rolanberry_Fields
-Ouryu,Riverne-Site_A01
-Ouryu,Lufaise_Meadows
-Bahamut,Riverne-Site_B01
-Bahamut,Lufaise_Meadows
-Sea,Sealions_Den
-Sea,AlTaieu
-Sea,The_Garden_of_RuHmet
-Sea,Grand_Palace_of_HuXzoi
+Sky/Kirin,VeLugannon_Palace,velugannon
+Sky/Kirin,The_Shrine_of_RuAvitau,ruavitau
+Sky/Kirin,RuAun_Gardens,ruaungard
+Dynamis,Dynamis-Jeuno,dynamisjeu
+Dynamis,Dynamis-Windurst,dynamiswin
+Dynamis,Dynamis-Bastok,dynamisbas
+Dynamis,Dynamis-San_dOria,dynamissan
+Dynamis,Dynamis-Xarcabard,dynamisxar
+Dynamis,Dynamis-Beaucedine,dynamisbcd
+Dynamis,Dynamis-Tavnazia,dynamistav
+Dynamis,Dynamis-Qufim,dynamisquf
+Dynamis,Dynamis-Buburimu,dynamisbub
+Dynamis,Dynamis-Valkurm,dynamisval
+Ouryu,Riverne-Site_A01,rivernea01
+Ouryu,Lufaise_Meadows,lufaisemds
+Bahamut,Riverne-Site_B01,riverneb01
+Bahamut,Lufaise_Meadows,lufaisemds
+Sea,Sealions_Den,
+Sea,AlTaieu,altaieu
+Sea,The_Garden_of_RuHmet,ruhmet
+Sea,Grand_Palace_of_HuXzoi,huxzoi
 Sea,Empyreal_Paradox
-Limbus,Temenos Apollyon
-Limbus,Apollyon
-Overlord Arthro,Jugner_Forest
-Ruinous Rocs,Rolanberry_Fields
-Sacred Scorpions,Sauromugue_Champaign
-Xolotl,Attohwa_Chasm
-Mammet-9999,Misareaux_Coast
-Ultimega,Lufaise_Meadows
-Tonberry Sovereign,Yhoator_Jungle
-Serket,Garlaige_Citadel
-Test,Northern_San_dOria
+Limbus,Temenos Apollyon,temenos
+Limbus,Apollyon,apollyon
+Test,Northern_San_dOria,nsandoria

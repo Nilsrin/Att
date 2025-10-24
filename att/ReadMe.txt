@@ -1,7 +1,7 @@
 Attendance Addon (att)
 ======================
 Author: literallywho, Nils  
-Version: 2.1  
+Version: 3.0 
 
 A Final Fantasy XI Ashita v4 addon that takes attendance of players (alliance-based or zone-based), provides a GUI to review/remove entries, and writes the final roster to a CSV file. It can optionally send a linkshell (LS) message announcing that attendance was taken for either an HNM or an Event.
 
@@ -49,6 +49,11 @@ A Final Fantasy XI Ashita v4 addon that takes attendance of players (alliance-ba
 ---------------------------------------
 3. Usage Overview
 ---------------------------------------
+**New command**
+1) Attend
+   - /attend will bring up a gui for taking attendance
+   - These buttons will allow for attendance of various things defined in the creditnames file - they will automatically search, then grab names
+
 Main Command: /att
 
 1) No arguments:
