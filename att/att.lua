@@ -1,102 +1,113 @@
-----------------------------------------------------------------------------------------------------
---  ATTENDANCE ADDON (Ashita v4) — Clean & Simple + Att (launcher)
---  v3.0
---    • Authors: Nils, literallywho
---    • /attend row: [tiny number field] [+] [-] "Delay (sec)" [Refresh] [Use LS2]
---    • Removed "Close after start" feature entirely
---    • Fixed-width, non-scaling delay input; clamps 0..99
---    • Auto-refresh suggestions when the player changes zones; manual Refresh button
-----------------------------------------------------------------------------------------------------
-addon.name      = 'att'
-addon.author    = 'Nils, literallywho'
-addon.version   = '3.0'
-addon.desc      = 'Attendance manager (clean) with /att launcher + categories'
+--------------------------------------------------------------------------------
+-- ATTENDANCE ADDON (Ashita v4)
+--  /att  : main attendance command
+--  /attend : GUI launcher (suggested events + categories)
+--  /atthelp : help window
+--
+-- Files used (in addon.path .. "resources\\"):
+--  zones.csv      : zoneId,Zone Name,...
+--  jobs.csv       : jobId,Job Abbrev,...
+--  shortnames.txt : alias,Full Event Name
+--  creditnames.txt: categories + "Event,Zone[,Area]"
+--  satimers.txt   : Minutes:<n> / Interval:<n>
+--
+-- Logs:
+--  HNMs   -> "HNM Logs\<date time>.csv"
+--  Events -> "Event Logs\<date time>.csv"
+--------------------------------------------------------------------------------
+addon.name    = 'att'
+addon.author  = 'Nils, literallywho'
+addon.version = '3.0'
+addon.desc    = 'Attendance manager with GUI launcher and self-attendance'
 
 require('common')
-local imgui   = require('imgui')
-local chat    = require('chat')
-local struct  = require('struct')
+local imgui  = require('imgui')
+local chat   = require('chat')
+local struct = require('struct')
 
-----------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 -- STATE / RESOURCES
-----------------------------------------------------------------------------------------------------
-local attZoneList       = {}   -- [zid] = zoneName
-local attJobList        = {}   -- [jobId] = abbr
-local attShortNames     = {}   -- [alias:lower] = Full Event Name (preserve case)
-local attCreditNames    = {}   -- [Event] = { "Zone Name", ... }   (UI display)
-local attCreditZoneIds  = {}   -- [Event] = { [zid]=true, ... }     (filtering)
-local attSearchArea     = {}   -- [Event] = "Area" for /sea <area> linkshell
+--------------------------------------------------------------------------------
+local attZoneList        = {}  -- [zid] = zone name
+local attJobList         = {}  -- [jobId] = job abbrev
+local attShortNames      = {}  -- [alias:lower] = Full Event Name
+local attCreditNames     = {}  -- [Event] = { zone1, zone2, ... }
+local attCreditZoneIds   = {}  -- [Event] = { [zid]=true, ... }
+local attSearchArea      = {}  -- [Event] = "Area" for /sea <area> linkshell
+local zoneNameToIds      = {}  -- [normZoneName] = { [zid]=true, ... }
 
-local zoneRoster            = {}   -- [name] = { jobsMain, jobsSub, zone, zid }
-local attendanceData        = {}   -- { {name, jobsMain, jobsSub, zone, zid, time}, ... }
+local attendCategories       = {} -- [category] = { event1, event2, ... }
+local attendCategoriesOrder  = {} -- { category1, category2, ... }
+local uncategorizedEvents    = {} -- { event, ... } for events not under a "-- Category"
 
-local g_LSMode              = nil  -- 'ls'|'ls2'|nil
-local g_SAMode              = false
-local selfAttendanceStart   = nil
-local selectedMode          = 'HNM' -- 'HNM'|'Event'
+local zoneRoster         = {}  -- [name] = { jobsMain, jobsSub, zone, zid } for SA
+local attendanceData     = {}  -- rows: { name, jobsMain, jobsSub, zone, zid, time }
 
-local isAttendanceWindowOpen = false
-local isAttendLauncherOpen   = false
+local g_LSMode           = nil -- 'ls' or 'ls2' (for /l / /l2)
+local g_SAMode           = false
+local selfAttendanceStart = nil
+local selectedMode       = 'HNM' -- 'HNM' or 'Event'
+
+local isAttendanceWindowOpen = false -- results window (/att)
+local isAttendLauncherOpen   = false -- launcher GUI (/attend)
 local isHelpWindowOpen       = false
 
--- SA timer (from resources/satimers.txt)
-local saTimerDuration     = 300     -- seconds
-local saReminderIntervals = {}      -- descending checkpoints (in seconds remaining)
+-- SA timers loaded from satimers.txt
+local saTimerDuration     = 300   -- seconds
+local saReminderIntervals = {}    -- list of "seconds elapsed" thresholds
 local confirm_commands    = { 'here', 'present', 'herebrother' }
 
--- Write/announce targets (filled on demand)
-local pendingEventName      = nil
-local pendingFilePath       = nil
-local pendingLSMessage      = nil
+-- Pending write targets
+local pendingEventName  = nil
+local pendingFilePath   = nil
+local pendingLSMessage  = nil
 
--- /attend state
-local attendUseLS2       = false
-local attendDelaySec     = 2        -- default 2s
+-- /attend options
+local attendUseLS2     = false  -- checkbox: Use LS2
+local attendDelaySec   = 2      -- delay before /att is executed
+local attendSelfAttest = false  -- checkbox: Self Attest
 
--- Delayed /att after /sea (armed by /attend click; fired in d3d_present)
-local pendingAttend = nil  -- { eventName=string, useLS2=bool, fireAt=number }
+-- /attend-armed /att
+local pendingAttend = nil -- { eventName, useLS2, selfAttest, fireAt }
 
--- /attend → /att "force event" bridge
+-- /attend → /att forced event name
 local attForcedEventName = nil
 
--- UI refresh after running /att
-local attForceRefreshAt  = nil      -- number (os.clock time) to refresh /attend display
-local attDetectedCache   = nil      -- { evs={ev1,ev2,...}, zone=string, zid=number }
+-- Zone-based suggestion cache
+local attForceRefreshAt = nil   -- os.clock time to refresh suggestions
+local attDetectedCache  = nil   -- { evs={...}, zone=string, zid=number }
+local lastDetectedZid   = nil   -- for auto refresh on zone change
 
--- Auto-refresh when the player’s zone changes
-local lastDetectedZid    = nil
+-- Memory scan parameters (robust scan of zone list)
+local STRIDE_CANDIDATES = { 0x4C, 0x50 }
+local NAME_OFFSETS      = { 0x08, 0x04 }
+local ZONE_OFFSETS      = { 0x2C, 0x28 }
+local MJ_OFFSETS        = { 0x24, 0x20 }
+local SJ_OFFSETS        = { 0x25, 0x21 }
+local NAME_LENGTHS      = { 16, 15 }
 
--- Categories derived from creditnames.txt
-local attendCategories       = {}   -- [category] = {event1, event2, ...} (file order)
-local attendCategoriesOrder  = {}   -- {category1, category2, ...}        (file order)
-local eventToCategory        = {}   -- [event] = category
-local uncategorizedEvents    = {}   -- {event,...} for events without a category (file order)
+--------------------------------------------------------------------------------
+-- STRING / SMALL HELPERS
+--------------------------------------------------------------------------------
+local function trim(s)
+    return (tostring(s or ''):gsub('^%s*(.-)%s*$', '%1'))
+end
 
--- Scan layout (robust)
-local STRIDE_CANDIDATES = { 0x4C, 0x50 }   -- 76, 80
-local NAME_OFFSETS       = { 0x08, 0x04 }  -- name field offsets
-local ZONE_OFFSETS       = { 0x2C, 0x28 }  -- zone id offsets
-local MJ_OFFSETS         = { 0x24, 0x20 }  -- main job id offsets
-local SJ_OFFSETS         = { 0x25, 0x21 }  -- sub job id offsets
-local NAME_LENGTHS       = { 16, 15 }      -- name lengths to read
+local function endswith(s, suf)
+    s   = tostring(s or '')
+    suf = tostring(suf or '')
+    return suf == '' or s:sub(-#suf) == suf
+end
 
--- Zone name -> zid(s)
-local zoneNameToIds = {}  -- normName -> { [zid]=true, ... }
-
-----------------------------------------------------------------------------------------------------
--- STRING HELPERS (binding-safe)
-----------------------------------------------------------------------------------------------------
-local function trim(s) return (tostring(s or ''):gsub('^%s*(.-)%s*$', '%1')) end
-local function endswith(s, suf) s=tostring(s or ''); suf=tostring(suf or ''); return suf=='' or s:sub(-#suf)==suf end
 local function trimend(s, ch)
-    s=tostring(s or '')
-    local patt = (ch and ch~='') and (ch:gsub('(%W)','%%%1')) or '%s'
-    return (s:gsub('['..patt..']+$',''))
+    s = tostring(s or '')
+    local patt = (ch and ch ~= '') and (ch:gsub('(%W)', '%%%1')) or '%s'
+    return (s:gsub('[' .. patt .. ']+$', ''))
 end
 
 local function strip_colors_if_any(s)
     if type(s) ~= 'string' then return '' end
-    if s.strip_colors then s = s:strip_colors() end
+    if s.strip_colors   then s = s:strip_colors() end
     if s.strip_translate then s = s:strip_translate(true) end
     s = s:gsub('\031.', ''):gsub('\030.', '')
     return s
@@ -123,52 +134,44 @@ end
 
 local function is_plausible_name(s)
     s = tostring(s or '')
-    return #s >= 2 and #s <= 15 and (not s:find('[%z\001-\008\011\012\014-\031]'))
+    return #s >= 2
+       and #s <= 15
+       and (not s:find('[%z\001-\008\011\012\014-\031]'))
 end
 
 local function sanitize_name(raw)
     if not raw then return '' end
-    raw = raw:gsub('%z+$',''):gsub('[\r\n]+','')
+    raw = raw:gsub('%z+$', ''):gsub('[\r\n]+', '')
     return trim(raw)
 end
 
 local function parse_time_string(timeStr)
     if not timeStr then return 0 end
-    local minutes, seconds = timeStr:match('^(%d+):(%d+)$')
-    if minutes and seconds then return tonumber(minutes) * 60 + tonumber(seconds) end
-    local mins = tonumber(timeStr); if mins then return mins * 60 end
+    local m, s = timeStr:match('^(%d+):(%d+)$')
+    if m and s then return tonumber(m) * 60 + tonumber(s) end
+    local mins = tonumber(timeStr)
+    if mins then return mins * 60 end
     return 0
 end
 
--- tiny helpers (no math.* needed)
 local function clamp_0_99(n)
     n = tonumber(n) or 0
-    if n < 0 then return 0 end
+    if n < 0  then return 0 end
     if n > 99 then return 99 end
     return n
 end
 
-----------------------------------------------------------------------------------------------------
--- SMALL UTILITIES
-----------------------------------------------------------------------------------------------------
+local function get_current_zone_id()
+    return ashita.memory.read_uint8(ashita.memory.find('FFXiMain.dll', 0, '??', 0x452818, 0))
+end
+
 local function ls_prefix()
     return (g_LSMode == 'ls2') and '/l2 ' or '/l '
 end
 
-local function prep_write_targets(mode, eventName)
-    local dateStr = os.date('%A %d %B %Y')
-    local timeStr = os.date('%H.%M.%S')
-    local baseDir, msg
-    if mode == 'HNM' then
-        baseDir = addon.path .. 'HNM Logs\\'
-        msg     = 'HNM Attendance taken for: ' .. eventName
-    else
-        baseDir = addon.path .. 'Event Logs\\'
-        msg     = 'Event Attendance taken for: ' .. eventName
-    end
-    return (baseDir .. dateStr .. ' ' .. timeStr .. '.csv'), msg
-end
-
+--------------------------------------------------------------------------------
+-- ATTENDANCE DATA HELPERS
+--------------------------------------------------------------------------------
 local function sortAttendance()
     table.sort(attendanceData, function(a, b)
         local an = (a.name or ''):gsub('^X%s+', ''):lower()
@@ -177,33 +180,55 @@ local function sortAttendance()
     end)
 end
 
-----------------------------------------------------------------------------------------------------
--- SATimers
-----------------------------------------------------------------------------------------------------
-local function loadSATimers()
-    saTimerDuration = 300
-    saReminderIntervals = {}
-    local durationStr = "5"
-    local intervalStr = "1"
+local function prep_write_targets(mode, eventName)
+    local dateStr = os.date('%A %d %B %Y')
+    local timeStr = os.date('%H.%M.%S')
+    local dir, msg
 
-    local filePath = addon.path .. 'resources/satimers.txt'
+    if mode == 'HNM' then
+        dir = addon.path .. 'HNM Logs\\'
+        msg = 'HNM Attendance taken for: ' .. eventName
+    else
+        dir = addon.path .. 'Event Logs\\'
+        msg = 'Event Attendance taken for: ' .. eventName
+    end
+
+    return (dir .. dateStr .. ' ' .. timeStr .. '.csv'), msg
+end
+
+--------------------------------------------------------------------------------
+-- SA TIMERS
+--------------------------------------------------------------------------------
+local function loadSATimers()
+    saTimerDuration     = 300
+    saReminderIntervals = {}
+
+    local durationStr = '5'
+    local intervalStr = '1'
+    local filePath    = addon.path .. 'resources/satimers.txt'
+
     local f = io.open(filePath, 'r')
     if f then
         for line in f:lines() do
             local key, val = line:match('^(%a+):%s*(%d+[:%d+]*)$')
             if key and val then
                 key = key:lower()
-                if key == 'minutes' then durationStr = val
-                elseif key == 'interval' then intervalStr = val end
+                if key == 'minutes' then
+                    durationStr = val
+                elseif key == 'interval' then
+                    intervalStr = val
+                end
             end
         end
         f:close()
     end
+
     local dur = parse_time_string(durationStr); if dur <= 0 then dur = 300 end
-    local int = parse_time_string(intervalStr); if int <= 0 then int = 60 end
+    local int = parse_time_string(intervalStr); if int <= 0 then int = 60  end
 
     saTimerDuration     = dur
     saReminderIntervals = {}
+
     local nextReminder = int
     while nextReminder < dur do
         table.insert(saReminderIntervals, dur - nextReminder)
@@ -211,31 +236,32 @@ local function loadSATimers()
     end
 end
 
-----------------------------------------------------------------------------------------------------
--- RESOURCES: zones, jobs, shortnames, creditnames (with categories)
-----------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+-- LOAD RESOURCES (zones, jobs, shortnames, creditnames)
+--------------------------------------------------------------------------------
 ashita.events.register('load', 'att_load_cb', function()
-    -- zones.csv -> "id,name,..."
+    -- zones.csv -> id,name,...
     for line in io.lines(addon.path .. 'resources/zones.csv') do
         local idx, nm = line:match('^(%d+),%s*(.-),')
         if idx and nm then
             local zid = tonumber(idx)
             attZoneList[zid] = nm
+
             local key = norm(nm)
             zoneNameToIds[key] = zoneNameToIds[key] or {}
             zoneNameToIds[key][zid] = true
         end
     end
 
-    -- jobs.csv -> "id,abbr,..."
+    -- jobs.csv -> id,abbr,...
     for line in io.lines(addon.path .. 'resources/jobs.csv') do
-        local idx, nm = line:match('^(%d+),%s*(.-),')
-        if idx and nm then
-            attJobList[tonumber(idx)] = nm
+        local idx, ab = line:match('^(%d+),%s*(.-),')
+        if idx and ab then
+            attJobList[tonumber(idx)] = ab
         end
     end
 
-    -- shortnames.txt -> "alias,Full Event Name"
+    -- shortnames.txt -> alias,Full Event Name
     for line in io.lines(addon.path .. 'resources/shortnames.txt') do
         local alias, fullname = line:match('^(.-),(.*)$')
         if alias and fullname then
@@ -243,10 +269,9 @@ ashita.events.register('load', 'att_load_cb', function()
         end
     end
 
-    -- creditnames.txt:
-    --   Category header lines: "-- HNMS," or "-- HNMS"
-    --   Event lines: "Event,Zone[,Area]"
+    -- creditnames.txt categories + events
     local currentCategory = nil
+
     local function ensure_category(cat)
         if not attendCategories[cat] then
             attendCategories[cat] = {}
@@ -257,16 +282,19 @@ ashita.events.register('load', 'att_load_cb', function()
     for raw in io.lines(addon.path .. 'resources/creditnames.txt') do
         local line = trim(raw)
         if line ~= '' then
-            local cat = line:match('^%-%-%s*(.-)%s*,%s*$') or line:match('^%-%-%s*(.-)%s*$')
+            -- Category header: "-- HNMS," or "-- HNMS"
+            local cat = line:match('^%-%-%s*(.-)%s*,%s*$') or
+                        line:match('^%-%-%s*(.-)%s*$')
             if cat and cat ~= '' then
                 currentCategory = cat
-                ensure_category(currentCategory)
+                ensure_category(cat)
             else
-                local a,b,c = line:match('^([^,]+)%s*,%s*([^,]*)%s*,?%s*(.*)$')
-                if a then
-                    local ev   = trim(a)
-                    local zone = trim(b or '')
-                    local area = trim(c or '')
+                -- Event line: "Event,Zone[,Area]"
+                local ev, zone, area = line:match('^([^,]+)%s*,%s*([^,]*)%s*,?%s*(.*)$')
+                if ev then
+                    ev   = trim(ev)
+                    zone = trim(zone or '')
+                    area = trim(area or '')
 
                     attCreditNames[ev]   = attCreditNames[ev]   or {}
                     attCreditZoneIds[ev] = attCreditZoneIds[ev] or {}
@@ -274,8 +302,9 @@ ashita.events.register('load', 'att_load_cb', function()
                     if zone ~= '' then
                         table.insert(attCreditNames[ev], zone)
                         local key = norm(zone)
-                        if zoneNameToIds[key] then
-                            for zid,_ in pairs(zoneNameToIds[key]) do
+                        local idSet = zoneNameToIds[key]
+                        if idSet then
+                            for zid,_ in pairs(idSet) do
                                 attCreditZoneIds[ev][zid] = true
                             end
                         end
@@ -290,7 +319,6 @@ ashita.events.register('load', 'att_load_cb', function()
                     if ev ~= 'Current Zone' then
                         if currentCategory then
                             table.insert(attendCategories[currentCategory], ev)
-                            eventToCategory[ev] = currentCategory
                         else
                             table.insert(uncategorizedEvents, ev)
                         end
@@ -301,25 +329,28 @@ ashita.events.register('load', 'att_load_cb', function()
     end
 
     if #uncategorizedEvents > 0 then
-        attendCategories["Other"] = attendCategories["Other"] or {}
-        for _,ev in ipairs(uncategorizedEvents) do
-            table.insert(attendCategories["Other"], ev)
-            eventToCategory[ev] = "Other"
+        local cat = 'Other'
+        attendCategories[cat] = attendCategories[cat] or {}
+        for _, ev in ipairs(uncategorizedEvents) do
+            table.insert(attendCategories[cat], ev)
         end
-        table.insert(attendCategoriesOrder, "Other")
+        table.insert(attendCategoriesOrder, cat)
     end
 end)
 
-----------------------------------------------------------------------------------------------------
--- SCANNING (robust)
-----------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+-- MEMORY SCAN HELPERS
+--------------------------------------------------------------------------------
 local function detect_stride(count, listPtr)
-    local bestStride, bestScore = STRIDE_CANDIDATES[1], -1
+    local bestStride = STRIDE_CANDIDATES[1]
+    local bestScore  = -1
+
     for _, stride in ipairs(STRIDE_CANDIDATES) do
         local seen, uniq = {}, 0
         for i = 0, (count > 0 and count - 1 or 0) do
             local entry = listPtr + (i * stride)
-            local name = ''
+            local name  = ''
+
             for _, noff in ipairs(NAME_OFFSETS) do
                 for _, nlen in ipairs(NAME_LENGTHS) do
                     local cand = sanitize_name(ashita.memory.read_string(entry + noff, nlen))
@@ -327,10 +358,19 @@ local function detect_stride(count, listPtr)
                 end
                 if name ~= '' then break end
             end
-            if name ~= '' and not seen[name] then seen[name] = true; uniq = uniq + 1 end
+
+            if name ~= '' and not seen[name] then
+                seen[name] = true
+                uniq       = uniq + 1
+            end
         end
-        if uniq > bestScore then bestScore = uniq; bestStride = stride end
+
+        if uniq > bestScore then
+            bestScore  = uniq
+            bestStride = stride
+        end
     end
+
     return bestStride
 end
 
@@ -339,7 +379,10 @@ local function read_cell(entry)
     for _, noff in ipairs(NAME_OFFSETS) do
         for _, nlen in ipairs(NAME_LENGTHS) do
             local cand = sanitize_name(ashita.memory.read_string(entry + noff, nlen))
-            if is_plausible_name(cand) then name = cand; break end
+            if is_plausible_name(cand) then
+                name = cand
+                break
+            end
         end
         if name ~= '' then break end
     end
@@ -347,18 +390,28 @@ local function read_cell(entry)
     local zid = 0
     for _, zoff in ipairs(ZONE_OFFSETS) do
         local v = ashita.memory.read_uint8(entry + zoff)
-        if v ~= nil then zid = v break end
+        if v ~= nil then
+            zid = v
+            break
+        end
     end
 
     local mj, sj = 0, 0
     for _, moff in ipairs(MJ_OFFSETS) do
         local v = ashita.memory.read_uint8(entry + moff)
-        if v ~= nil then mj = v break end
+        if v ~= nil then
+            mj = v
+            break
+        end
     end
     for _, soff in ipairs(SJ_OFFSETS) do
         local v = ashita.memory.read_uint8(entry + soff)
-        if v ~= nil then sj = v break end
+        if v ~= nil then
+            sj = v
+            break
+        end
     end
+
     return name, zid, mj, sj
 end
 
@@ -368,6 +421,7 @@ end
 
 local function scan_inclusive(count, listPtr, stride)
     local out = {}
+
     local function try_index(i)
         local entry = listPtr + (i * stride)
         local name, zid, mj, sj = read_cell(entry)
@@ -376,29 +430,47 @@ local function scan_inclusive(count, listPtr, stride)
             out[name] = { zid = zid, mj = mj, sj = sj }
         end
     end
-    for i = 0, count do try_index(i) end
+
+    for i = 0, count do
+        try_index(i)
+    end
     try_index(count + 1)
+
     return out
 end
 
 local function zid_in_credit(eventName, zid)
     if not eventName then return false end
+
     local set = attCreditZoneIds[eventName]
-    if set and next(set) ~= nil then return set[zid] == true end
+    if set and next(set) ~= nil then
+        return set[zid] == true
+    end
+
+    -- Fallback: compare normalized names
     local zname = attZoneList[zid] or 'UnknownZone'
-    local list = attCreditNames[eventName]
+    local list  = attCreditNames[eventName]
     if not list then return false end
-    for _, s in ipairs(list) do if norm(s) == norm(zname) then return true end end
+
+    local nz = norm(zname)
+    for _, s in ipairs(list) do
+        if norm(s) == nz then return true end
+    end
+
     return false
 end
 
-----------------------------------------------------------------------------------------------------
--- DATA BUILDERS
-----------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+-- DATA BUILDERS: CREDIT ROSTER / ALLIANCE / ZONE
+--------------------------------------------------------------------------------
 local function buildCreditRoster()
     zoneRoster = {}
+
     local base = ashita.memory.read_int32(ashita.memory.find('FFXiMain.dll', 0, '??', 0x62D014, 0))
-    if base == 0 then print('[att] credit: base=0'); return end
+    if base == 0 then
+        print('[att] credit: base=0')
+        return
+    end
 
     local baseAddr = base + 12
     local count    = ashita.memory.read_int32(baseAddr)
@@ -423,6 +495,7 @@ local function buildCreditRoster()
             added = added + 1
         end
     end
+
     print(string.format('[att] credit roster: %d eligible', added))
 end
 
@@ -437,7 +510,7 @@ local function gatherAllianceData()
                 table.insert(attendanceData, {
                     name     = name,
                     jobsMain = attJobList[pm:GetMemberMainJob(i)] or 'NONE',
-                    jobsSub  = attJobList[pm:GetMemberSubJob(i)]  or 'NONE',
+                    jobsSub  = attJobList[pm:GetMemberSubJob(i)] or 'NONE',
                     zone     = zname,
                     zid      = zid,
                     time     = os.date('%H:%M:%S')
@@ -450,7 +523,10 @@ end
 
 local function gatherZoneData()
     local base = ashita.memory.read_int32(ashita.memory.find('FFXiMain.dll', 0, '??', 0x62D014, 0))
-    if base == 0 then print('[att] gather: base=0'); return end
+    if base == 0 then
+        print('[att] gather: base=0')
+        return
+    end
 
     local baseAddr = base + 12
     local count    = ashita.memory.read_int32(baseAddr)
@@ -465,7 +541,7 @@ local function gatherZoneData()
 
     local seen = {}
     for _, row in ipairs(attendanceData) do
-        seen[row.name:gsub('^X%s+',''):lower()] = true
+        seen[row.name:gsub('^X%s+', ''):lower()] = true
     end
 
     local added = 0
@@ -481,22 +557,29 @@ local function gatherZoneData()
                 time     = os.date('%H:%M:%S')
             })
             seen[key] = true
-            added = added + 1
+            added     = added + 1
         end
     end
+
     print(string.format('[att] gather: added %d', added))
     sortAttendance()
 end
 
-----------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 -- WRITE CSV
-----------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 local function writeAttendanceFile()
     if not pendingFilePath or not pendingEventName then
-        print('[att] No pending file or event to write!'); return
+        print('[att] No pending file or event to write!')
+        return
     end
+
     local f = io.open(pendingFilePath, 'a')
-    if not f then print('[att] Could not open file: ' .. pendingFilePath); return end
+    if not f then
+        print('[att] Could not open file: ' .. pendingFilePath)
+        return
+    end
+
     local count = 0
     for _, row in ipairs(attendanceData) do
         if not row.name:match('^X ') then
@@ -512,47 +595,55 @@ local function writeAttendanceFile()
             count = count + 1
         end
     end
+
     f:close()
     print(string.format('[att] Wrote %d entries to %s', count, pendingFilePath))
 end
 
-----------------------------------------------------------------------------------------------------
--- ZONE/EVENT RESOLUTION + DETECTION CACHE
-----------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+-- ZONE → EVENTS (SUGGESTIONS)
+--------------------------------------------------------------------------------
 local function resolve_events_for_current_zone()
-    local zid = ashita.memory.read_uint8(ashita.memory.find('FFXiMain.dll', 0, '??', 0x452818, 0))
+    local zid   = get_current_zone_id()
     local zname = attZoneList[zid] or 'UnknownZone'
 
-    -- Prefer ID matches
+    -- Prefer explicit zoneId mappings
     local evs_by_id = {}
     for eventName, zoneIdSet in pairs(attCreditZoneIds) do
-        if zoneIdSet[zid] then table.insert(evs_by_id, eventName) end
+        if zoneIdSet[zid] then
+            table.insert(evs_by_id, eventName)
+        end
     end
     if #evs_by_id > 0 then
         return evs_by_id, zname, zid
     end
 
     -- Fallback by normalized zone name
-    local nz = norm(zname)
-    local evs_by_name = {}
+    local nz   = norm(zname)
+    local evs  = {}
     for eventName, zoneList in pairs(attCreditNames) do
         for _, zone in ipairs(zoneList) do
             if norm(zone) == nz then
-                table.insert(evs_by_name, eventName)
+                table.insert(evs, eventName)
                 break
             end
         end
     end
-    return evs_by_name, zname, zid
+
+    return evs, zname, zid
 end
 
 local function sort_events_by_category_order(evlist)
-    local order, idx = {}, 1
+    local order = {}
+    local idx   = 1
+
     for _, cat in ipairs(attendCategoriesOrder) do
         for _, ev in ipairs(attendCategories[cat] or {}) do
-            order[ev] = idx; idx = idx + 1
+            order[ev] = idx
+            idx       = idx + 1
         end
     end
+
     table.sort(evlist, function(a, b)
         local oa = order[a] or 999999
         local ob = order[b] or 999999
@@ -563,56 +654,61 @@ end
 
 local function update_att_detect_cache()
     local evs, zname, zid = resolve_events_for_current_zone()
-    if evs and #evs > 1 then sort_events_by_category_order(evs) end
+    if evs and #evs > 1 then
+        sort_events_by_category_order(evs)
+    end
     attDetectedCache = { evs = evs or {}, zone = zname, zid = zid }
 end
 
-----------------------------------------------------------------------------------------------------
--- /attend helpers
-----------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+-- /ATTEND HELPER: queue /sea + delayed /att
+--------------------------------------------------------------------------------
 local function attend_launch_for_event(eventName)
-    local area = attSearchArea[eventName]
-        or (attCreditNames[eventName] and attCreditNames[eventName][1])
-        or ''
+    local area = attSearchArea[eventName] or
+                 (attCreditNames[eventName] and attCreditNames[eventName][1]) or ''
     if area == '' then
         print(string.format('[att] No search area found for "%s". Check creditnames.txt.', eventName))
         return
     end
 
-    -- Force the event for the upcoming /att (bypasses alias parsing)
+    -- Force event name for next /att
     attForcedEventName = eventName
 
-    -- 1) /sea <area> linkshell immediately
-    AshitaCore:GetChatManager():QueueCommand(1, string.format('/sea %s linkshell', area))
+    -- /sea <area> linkshell(/2)
+    local lsSearch = attendUseLS2 and 'linkshell2' or 'linkshell'
+    AshitaCore:GetChatManager():QueueCommand(1, string.format('/sea %s %s', area, lsSearch))
 
-    -- 2) Arm a delayed /att to be executed from d3d_present
-    local delaySec = tonumber(attendDelaySec) or 2
-    if delaySec < 0 then delaySec = 0 end
+    -- Arm delayed /att call (handled in d3d_present)
+    local delay = tonumber(attendDelaySec) or 2
+    if delay < 0 then delay = 0 end
+
     pendingAttend = {
-        eventName = eventName,
-        useLS2    = attendUseLS2,
-        fireAt    = os.clock() + delaySec,
+        eventName  = eventName,
+        useLS2     = attendUseLS2,
+        selfAttest = attendSelfAttest,
+        fireAt     = os.clock() + delay,
     }
-
-    -- (No more auto-close; "Close after start" was removed)
 end
 
-----------------------------------------------------------------------------------------------------
--- PACKET: SA chat (!here / !present / !herebrother / !addme)
-----------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+-- PACKET: SELF-ATTENDANCE CHAT
+--------------------------------------------------------------------------------
 ashita.events.register('packet_in', 'att_sa_packet_in', function(e)
-    if not g_SAMode or e.id ~= 0x017 then return end
+    if not g_SAMode or e.id ~= 0x017 then
+        return
+    end
 
-    local char = struct.unpack('c15', e.data_modified, 0x08 + 1):gsub('%z+$','')
+    local char = struct.unpack('c15', e.data_modified, 0x08 + 1):gsub('%z+$', '')
     local raw  = struct.unpack('s',  e.data_modified, 0x17 + 1)
     local msg  = clean_str(raw):lower()
 
-    -- Confirmations remove 'X ' prefix
+    -- Confirmation commands: only if char was in zoneRoster at SA start
     for _, trigger in ipairs(confirm_commands) do
         if msg:match('^!' .. trigger) then
-            local zid = ashita.memory.read_uint8(ashita.memory.find('FFXiMain.dll', 0, '??', 0x452818, 0))
-            if not zid_in_credit(pendingEventName, zid) then return end
-
+            if not zoneRoster[char] then
+                -- char was not in the event zone roster; ignore
+                return
+            end
             for _, row in ipairs(attendanceData) do
                 if row.name == ('X ' .. char) then
                     row.name = char
@@ -624,13 +720,17 @@ ashita.events.register('packet_in', 'att_sa_packet_in', function(e)
         end
     end
 
-    -- Manual opt-in
+    -- Manual opt-in: !addme from anywhere
     if msg:match('^!addme') then
         for _, row in ipairs(attendanceData) do
-            if row.name:gsub("^X ", ""):lower() == char:lower() then return end
+            if row.name:gsub('^X ', ''):lower() == char:lower() then
+                return
+            end
         end
-        local zid   = ashita.memory.read_uint8(ashita.memory.find('FFXiMain.dll', 0, '??', 0x452818, 0))
+
+        local zid   = get_current_zone_id()
         local zname = attZoneList[zid] or 'UnknownZone'
+
         table.insert(attendanceData, {
             name     = char,
             jobsMain = 'IN',
@@ -644,65 +744,75 @@ ashita.events.register('packet_in', 'att_sa_packet_in', function(e)
     end
 end)
 
-----------------------------------------------------------------------------------------------------
--- COMMANDS: /att (main), /attend (launcher), /atthelp
-----------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+-- COMMAND: /att (main)
+--------------------------------------------------------------------------------
 ashita.events.register('command', 'att_command_cb', function(e)
     local args = e.command:args()
-    if #args == 0 or args[1]:lower() ~= '/att' then return end
+    if #args == 0 or args[1]:lower() ~= '/att' then
+        return
+    end
     e.blocked = true
 
+    -- /att help
     if #args == 2 and args[2]:lower() == 'help' then
         isHelpWindowOpen = true
         return
     end
 
-    -- /att here → detect event by current zone and launch /att ls "<event>"
+    -- /att here -> auto-detect event by current zone and call /att ls "<event>"
     if #args == 2 and args[2]:lower() == 'here' then
         local evs, currentZone = resolve_events_for_current_zone()
-        local matchedEvent = evs and evs[1] or nil
-        if matchedEvent then
-            AshitaCore:GetChatManager():QueueCommand(1, string.format('/att ls "%s"', matchedEvent))
+        local ev = evs and evs[1] or nil
+        if ev then
+            AshitaCore:GetChatManager():QueueCommand(1, string.format('/att ls "%s"', ev))
         else
-            print(string.format("[att] No event found for current zone: %s", currentZone or 'Unknown'))
+            print(string.format('[att] No event found for current zone: %s', currentZone or 'Unknown'))
         end
         return
     end
 
-    -- Reset state each /att call
-    attendanceData        = {}
-    pendingFilePath       = nil
-    pendingLSMessage      = nil
-    selectedMode          = 'HNM'
-    g_LSMode              = nil
-    g_SAMode              = false
-    selfAttendanceStart   = nil
-    zoneRoster            = {}
+    -- Reset state for each /att invocation
+    attendanceData       = {}
+    pendingFilePath      = nil
+    pendingLSMessage     = nil
+    selectedMode         = 'HNM'
+    g_LSMode             = nil
+    g_SAMode             = false
+    selfAttendanceStart  = nil
+    zoneRoster           = {}
 
-    -- Parse flags + robust alias capture (multi-word/quoted)
+    -- Parse flags + event alias
     local lsMode, writeMode, saFlag = nil, nil, false
     local aliasParts = {}
+
     for i = 2, #args do
-        local a = args[i]
+        local a  = args[i]
         local al = a:lower()
-        if     al == 'ls'  then lsMode = 'ls'
-        elseif al == 'ls2' then lsMode = 'ls2'
+        if     al == 'ls'  then lsMode    = 'ls'
+        elseif al == 'ls2' then lsMode    = 'ls2'
         elseif al == 'h'   then writeMode = 'HNM'
         elseif al == 'e'   then writeMode = 'Event'
-        elseif al == 'sa'  then saFlag = true
+        elseif al == 'sa'  then saFlag    = true
         else
             table.insert(aliasParts, a)
         end
     end
+
     local alias = nil
     if #aliasParts > 0 then
-        alias = table.concat(aliasParts, ' '):gsub('^"(.*)"$', '%1')
+        alias = table.concat(aliasParts, ' ')
+        alias = alias:gsub('^"(.*)"$', '%1') -- strip outer quotes
     end
+
     g_LSMode = lsMode
 
-    -- Resolve event (forced override from /attend takes precedence)
+    -- Resolve event name:
+    --   1) forced by /attend
+    --   2) alias mapping
+    --   3) "Current Zone"
     if attForcedEventName and attForcedEventName ~= '' then
-        pendingEventName = attForcedEventName
+        pendingEventName   = attForcedEventName
         attForcedEventName = nil
     else
         if alias and alias ~= '' then
@@ -712,19 +822,23 @@ ashita.events.register('command', 'att_command_cb', function(e)
         end
     end
 
-    -- Map "Current Zone" dynamically when used
-    local zid = ashita.memory.read_uint8(ashita.memory.find('FFXiMain.dll', 0, '??', 0x452818, 0))
+    -- "Current Zone" is dynamic: map to your actual zone name/id right now
+    local zid = get_current_zone_id()
     if pendingEventName == 'Current Zone' then
-        attCreditNames['Current Zone']    = { attZoneList[zid] or 'UnknownZone' }
-        attCreditZoneIds['Current Zone']  = { [zid] = true }
+        attCreditNames['Current Zone']   = { attZoneList[zid] or 'UnknownZone' }
+        attCreditZoneIds['Current Zone'] = { [zid] = true }
     end
 
-    -- SA mode
+    -- SA MODE
     if saFlag then
         loadSATimers()
         g_SAMode            = true
         selfAttendanceStart = os.time()
+
+        -- Build roster from event zone (not from your current zone).
         buildCreditRoster()
+
+        -- 1) Everyone in that event zone gets an X-prefix (pending)
         for name, info in pairs(zoneRoster) do
             table.insert(attendanceData, {
                 name     = 'X ' .. name,
@@ -735,27 +849,60 @@ ashita.events.register('command', 'att_command_cb', function(e)
                 time     = os.date('%H:%M:%S')
             })
         end
+
+        -- 2) Host (you) is always counted as present
+        local pm       = AshitaCore:GetMemoryManager():GetParty()
+        local selfName = pm and pm:GetMemberName(0) or nil
+        if selfName and selfName ~= '' then
+            local exists = false
+
+            -- If we already have X selfName, convert to non-X
+            for _, row in ipairs(attendanceData) do
+                if row.name:gsub('^X ', ''):lower() == selfName:lower() then
+                    row.name = selfName
+                    exists   = true
+                    break
+                end
+            end
+
+            if not exists then
+                local selfZid   = pm and pm:GetMemberZone(0) or zid
+                local selfZname = attZoneList[selfZid] or 'UnknownZone'
+                table.insert(attendanceData, {
+                    name     = selfName,
+                    jobsMain = attJobList[pm:GetMemberMainJob(0)] or 'IN',
+                    jobsSub  = attJobList[pm:GetMemberSubJob(0)]  or 'IN',
+                    zone     = selfZname,
+                    zid      = selfZid,
+                    time     = os.date('%H:%M:%S')
+                })
+            end
+        end
+
         sortAttendance()
         isAttendanceWindowOpen = true
+
         AshitaCore:GetChatManager():QueueCommand(1,
             ls_prefix() .. string.format(
-                'Self-attendance for %s started. You have %d minutes. Use !here (or !present, !herebrother) to confirm or !addme to opt in.',
+                'Self-attendance for %s started. You have %d minutes. Use !here / !present / !herebrother to confirm, or !addme to opt in.',
                 pendingEventName, saTimerDuration / 60
             )
         )
         return
     end
 
-    -- Population mode
+    -- POPULATION MODE
     if lsMode then
+        -- LS population: search the wider zone list
         gatherZoneData()
     else
+        -- Non-LS: just the alliance
         gatherAllianceData()
     end
 
-    -- Immediate write mode
+    -- IMMEDIATE WRITE MODE (/att h or /att e)
     if writeMode then
-        selectedMode      = writeMode
+        selectedMode           = writeMode
         pendingFilePath, pendingLSMessage = prep_write_targets(writeMode, pendingEventName)
         writeAttendanceFile()
         if pendingLSMessage then
@@ -764,17 +911,57 @@ ashita.events.register('command', 'att_command_cb', function(e)
         return
     end
 
+    -- Otherwise, just show the results window
     sortAttendance()
     isAttendanceWindowOpen = true
 end)
 
+--------------------------------------------------------------------------------
+-- COMMAND: /attend (launcher GUI)
+--------------------------------------------------------------------------------
 ashita.events.register('command', 'att_attend_cmd', function(e)
     local args = e.command:args()
-    if #args == 0 or args[1]:lower() ~= '/attend' then return end
+    if #args == 0 or args[1]:lower() ~= '/attend' then
+        return
+    end
     e.blocked = true
-    isAttendLauncherOpen = true
+
+    if #args == 1 then
+        isAttendLauncherOpen = not isAttendLauncherOpen
+        if isAttendLauncherOpen then
+            update_att_detect_cache()
+        end
+        return
+    end
+
+    local sub = (args[2] or ''):lower()
+    if sub == 'open' then
+        if not isAttendLauncherOpen then
+            isAttendLauncherOpen = true
+            update_att_detect_cache()
+        end
+        return
+    elseif sub == 'close' then
+        isAttendLauncherOpen = false
+        return
+    elseif sub == 'toggle' then
+        isAttendLauncherOpen = not isAttendLauncherOpen
+        if isAttendLauncherOpen then
+            update_att_detect_cache()
+        end
+        return
+    end
+
+    -- Unknown argument -> default to toggle
+    isAttendLauncherOpen = not isAttendLauncherOpen
+    if isAttendLauncherOpen then
+        update_att_detect_cache()
+    end
 end)
 
+--------------------------------------------------------------------------------
+-- COMMAND: /atthelp (help window)
+--------------------------------------------------------------------------------
 ashita.events.register('command', 'att_help_cb', function(e)
     local args = e.command:args()
     if #args >= 1 and args[1]:lower() == '/atthelp' then
@@ -783,21 +970,32 @@ ashita.events.register('command', 'att_help_cb', function(e)
     end
 end)
 
-----------------------------------------------------------------------------------------------------
--- TICK / UI
-----------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+-- D3D PRESENT: TICK, WINDOWS, SA TIMERS
+--------------------------------------------------------------------------------
 ashita.events.register('d3d_present', 'att_present_cb', function()
-    -- Fire delayed /att from /attend when ready
+    ------------------------------------------------------------------------
+    -- Fire queued /att from /attend when delay has elapsed
+    ------------------------------------------------------------------------
     if pendingAttend and os.clock() >= pendingAttend.fireAt then
         local lsFlag = pendingAttend.useLS2 and 'ls2' or 'ls'
-        AshitaCore:GetChatManager():QueueCommand(1, string.format('/att %s "%s"', lsFlag, pendingAttend.eventName))
+        local cmd
+        if pendingAttend.selfAttest then
+            cmd = string.format('/att %s sa "%s"', lsFlag, pendingAttend.eventName)
+        else
+            cmd = string.format('/att %s "%s"', lsFlag, pendingAttend.eventName)
+        end
+
+        AshitaCore:GetChatManager():QueueCommand(1, cmd)
         attForceRefreshAt = os.clock() + 0.05
         pendingAttend = nil
     end
 
-    -- Auto-refresh suggestions when the player changes zones
+    ------------------------------------------------------------------------
+    -- Auto-refresh suggestions when your zone changes
+    ------------------------------------------------------------------------
     do
-        local zidNow = ashita.memory.read_uint8(ashita.memory.find('FFXiMain.dll', 0, '??', 0x452818, 0))
+        local zidNow = get_current_zone_id()
         if zidNow ~= nil then
             if lastDetectedZid == nil then
                 lastDetectedZid = zidNow
@@ -808,29 +1006,36 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
         end
     end
 
-    -- Run the refresh if scheduled
     if attForceRefreshAt and os.clock() >= attForceRefreshAt then
         update_att_detect_cache()
         attForceRefreshAt = nil
     end
 
-    -- SA reminders + auto-submit
+    ------------------------------------------------------------------------
+    -- SA timers: reminders + auto-submit when time is up
+    ------------------------------------------------------------------------
     if g_SAMode and selfAttendanceStart then
         local elapsed = os.time() - selfAttendanceStart
 
+        -- Reminders
         for i = #saReminderIntervals, 1, -1 do
             if elapsed >= saReminderIntervals[i] then
                 local pending = {}
                 for _, r in ipairs(attendanceData) do
-                    if r.name:match('^X ') then table.insert(pending, r.name:sub(3)) end
+                    if r.name:match('^X ') then
+                        table.insert(pending, r.name:sub(3))
+                    end
                 end
                 if #pending > 0 then
-                    AshitaCore:GetChatManager():QueueCommand(1, ls_prefix() .. ('Pending confirmation: ' .. table.concat(pending, ', ')))
+                    AshitaCore:GetChatManager():QueueCommand(1,
+                        ls_prefix() .. ('Pending confirmation: ' .. table.concat(pending, ', '))
+                    )
                 end
                 table.remove(saReminderIntervals, i)
             end
         end
 
+        -- Auto-submit
         if elapsed >= saTimerDuration then
             pendingFilePath, pendingLSMessage = prep_write_targets(selectedMode, pendingEventName)
             writeAttendanceFile()
@@ -844,9 +1049,11 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
         end
     end
 
-    -- Attendance Results window
+    ------------------------------------------------------------------------
+    -- Attendance Results window (/att)
+    ------------------------------------------------------------------------
     if isAttendanceWindowOpen then
-        imgui.SetNextWindowSize({1050,600}, ImGuiCond_FirstUseEver)
+        imgui.SetNextWindowSize({ 1050, 600 }, ImGuiCond_FirstUseEver)
         local openPtr = { isAttendanceWindowOpen }
         if imgui.Begin('Attendance Results', openPtr) then
 
@@ -864,23 +1071,32 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
                 if imgui.Button('Show Pending') then
                     local pending = {}
                     for _, r in ipairs(attendanceData) do
-                        if r.name:match('^X ') then table.insert(pending, r.name:sub(3)) end
+                        if r.name:match('^X ') then
+                            table.insert(pending, r.name:sub(3))
+                        end
                     end
                     if #pending > 0 then
-                        AshitaCore:GetChatManager():QueueCommand(1, ls_prefix() .. ('Pending confirmation: ' .. table.concat(pending, ', ')))
+                        AshitaCore:GetChatManager():QueueCommand(1,
+                            ls_prefix() .. ('Pending confirmation: ' .. table.concat(pending, ', '))
+                        )
                     else
                         print('[att] No one left with X prefix.')
                     end
                 end
+
                 imgui.SameLine()
+
                 if imgui.Button('Refresh Data') then
                     buildCreditRoster()
-                    local added = 0
+                    local added      = 0
                     local addedNames = {}
                     for name, info in pairs(zoneRoster) do
                         local exists = false
                         for _, row in ipairs(attendanceData) do
-                            if row.name:gsub("^X ", ""):lower() == name:lower() then exists = true break end
+                            if row.name:gsub('^X ', ''):lower() == name:lower() then
+                                exists = true
+                                break
+                            end
                         end
                         if not exists then
                             table.insert(attendanceData, {
@@ -902,22 +1118,29 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
                     end
                     sortAttendance()
                 end
+
                 imgui.Separator()
             end
 
-            imgui.Text('Select Mode:') imgui.SameLine()
-            if imgui.RadioButton('HNM',   selectedMode=='HNM')   then selectedMode='HNM'   end
+            imgui.Text('Select Mode:')
             imgui.SameLine()
-            if imgui.RadioButton('Event', selectedMode=='Event') then selectedMode='Event' end
+            if imgui.RadioButton('HNM', selectedMode == 'HNM') then
+                selectedMode = 'HNM'
+            end
+            imgui.SameLine()
+            if imgui.RadioButton('Event', selectedMode == 'Event') then
+                selectedMode = 'Event'
+            end
 
             imgui.Separator()
             imgui.Text('Attendance for: ' .. (pendingEventName or ''))
             local znames = attCreditNames[pendingEventName]
-            imgui.Text('Credit Zones: ' .. (((znames and #znames > 0) and table.concat(znames, ", ")) or "UnknownZone"))
+            imgui.Text('Credit Zones: ' ..
+                (((znames and #znames > 0) and table.concat(znames, ', ')) or 'UnknownZone'))
             imgui.Separator()
 
             imgui.Text('Attendees: ' .. #attendanceData)
-            imgui.BeginChild('att_list', {0, -50}, true)
+            imgui.BeginChild('att_list', { 0, -50 }, true)
 
             local i = 1
             while i <= #attendanceData do
@@ -934,7 +1157,6 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
             imgui.EndChild()
             imgui.Separator()
 
-            -- Buttons: Write / Write & Close / Cancel
             if imgui.Button('Write') then
                 pendingFilePath, pendingLSMessage = prep_write_targets(selectedMode, pendingEventName)
                 writeAttendanceFile()
@@ -952,98 +1174,120 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
                     AshitaCore:GetChatManager():QueueCommand(1, ls_prefix() .. pendingLSMessage)
                 end
                 isAttendanceWindowOpen = false
-                openPtr[1] = false
-                g_SAMode = false
+                openPtr[1]             = false
+                g_SAMode               = false
             end
 
             imgui.SameLine()
 
             if imgui.Button('Cancel') then
                 isAttendanceWindowOpen = false
-                openPtr[1] = false
-                g_SAMode = false
+                openPtr[1]             = false
+                g_SAMode               = false
             end
 
             imgui.End()
         end
+
         isAttendanceWindowOpen = openPtr[1]
         if not isAttendanceWindowOpen then
             g_SAMode = false
         end
     end
 
-    -- Help window
+    ------------------------------------------------------------------------
+    -- Help window (/atthelp)
+    ------------------------------------------------------------------------
     if isHelpWindowOpen then
-        imgui.SetNextWindowSize({600, 300}, ImGuiCond_FirstUseEver)
+        imgui.SetNextWindowSize({ 600, 300 }, ImGuiCond_FirstUseEver)
         local open = { true }
-        if imgui.Begin("ATT Addon Help", open) then
-            imgui.Text("Commands:")
-            imgui.BulletText("/att ls {alias}      — Attendance via LS1")
-            imgui.BulletText("/att ls2 {alias}     — Attendance via LS2")
-            imgui.BulletText("/att sa {alias}      — Self-attendance")
-            imgui.BulletText("/att h               — Write now as HNM")
-            imgui.BulletText("/att e               — Write now as Event")
-            imgui.BulletText("/att here            — Detect event by your current zone")
-            imgui.BulletText("/attend              — Open Att (buttons)")
-            imgui.BulletText("/atthelp             — Show this help window")
-            imgui.Text(" ")
-            imgui.Text("Self-attendance chat:")
-            imgui.BulletText("!here / !present / !herebrother — confirm (remove X)")
-            imgui.BulletText("!addme                           — opt in manually")
-            if imgui.Button("Close##help") then isHelpWindowOpen = false end
+        if imgui.Begin('ATT Help', open) then
+            imgui.Text('Commands:')
+            imgui.BulletText('/att ls {alias}           - Attendance via LS1')
+            imgui.BulletText('/att ls2 {alias}          - Attendance via LS2')
+            imgui.BulletText('/att sa {alias}           - Self-attendance (current chat LS)')
+            imgui.BulletText('/att ls sa {alias}        - Self-attendance via LS1')
+            imgui.BulletText('/att ls2 sa {alias}       - Self-attendance via LS2')
+            imgui.BulletText('/att h                    - Write immediately as HNM')
+            imgui.BulletText('/att e                    - Write immediately as Event')
+            imgui.BulletText('/att here                 - Detect event from your current zone')
+            imgui.BulletText('/attend                   - Open Att launcher GUI')
+            imgui.BulletText('/atthelp                  - Show this help window')
+            imgui.Text(' ')
+            imgui.Text('Self-attendance chat:')
+            imgui.BulletText('!here / !present / !herebrother - confirm (removes X) if in SA event zone')
+            imgui.BulletText('!addme                           - opt in manually from anywhere')
+            if imgui.Button('Close##help') then
+                isHelpWindowOpen = false
+            end
             imgui.End()
         end
-        if not open[1] then isHelpWindowOpen = false end
+        if not open[1] then
+            isHelpWindowOpen = false
+        end
     end
 
-    -- Att UI (/attend) with requested row layout
+    ------------------------------------------------------------------------
+    -- /attend GUI: top settings + suggestions + categories
+    ------------------------------------------------------------------------
     if isAttendLauncherOpen then
-        imgui.SetNextWindowSize({600, 560}, ImGuiCond_FirstUseEver)
+        imgui.SetNextWindowSize({ 600, 560 }, ImGuiCond_FirstUseEver)
         local openPtr = { isAttendLauncherOpen }
         if imgui.Begin('Att', openPtr) then
-            -- ROW: [short number] [+] [-] "Delay (sec)" [Refresh] [Use LS2]
-            do
-                local delayPtr = { attendDelaySec }
-                imgui.PushItemWidth(32)  -- tiny fixed width (no scaling)
-                if imgui.InputInt('##delay', delayPtr, 0, 0) then
-                    attendDelaySec = clamp_0_99(delayPtr[1])
-                end
-                imgui.PopItemWidth()
 
-                imgui.SameLine()
-                if imgui.SmallButton('+##delay_inc') then
-                    attendDelaySec = clamp_0_99((attendDelaySec or 0) + 1)
-                end
-
-                imgui.SameLine()
-                if imgui.SmallButton('-##delay_dec') then
-                    attendDelaySec = clamp_0_99((attendDelaySec or 0) - 1)
-                end
-
-                imgui.SameLine()
-                imgui.Text('Delay (sec)')
-
-                imgui.SameLine()
-                if imgui.Button('Refresh') then
-                    update_att_detect_cache()
-                end
-
-                imgui.SameLine()
-                local ls2Ptr = { attendUseLS2 }
-                if imgui.Checkbox('Use LS2', ls2Ptr) then
-                    attendUseLS2 = ls2Ptr[1]
-                end
+            -- Top settings row
+            local ls2Ptr = { attendUseLS2 }
+            if imgui.Checkbox('Use LS2', ls2Ptr) then
+                attendUseLS2 = ls2Ptr[1]
             end
 
-            -- Suggested events (zone-aware)
+            imgui.SameLine()
+
+            local saPtr = { attendSelfAttest }
+            if imgui.Checkbox('Self Attest', saPtr) then
+                attendSelfAttest = saPtr[1]
+            end
+
+            imgui.SameLine()
+
+            local delayPtr = { attendDelaySec }
+            imgui.PushItemWidth(32)
+            if imgui.InputInt('##delay', delayPtr, 0, 0) then
+                attendDelaySec = clamp_0_99(delayPtr[1])
+            end
+            imgui.PopItemWidth()
+
+            imgui.SameLine()
+            if imgui.SmallButton('+##delay_inc') then
+                attendDelaySec = clamp_0_99((attendDelaySec or 0) + 1)
+            end
+
+            imgui.SameLine()
+            if imgui.SmallButton('-##delay_dec') then
+                attendDelaySec = clamp_0_99((attendDelaySec or 0) - 1)
+            end
+
+            imgui.SameLine()
+            imgui.Text('Delay (sec)')
+
+            imgui.SameLine()
+            if imgui.Button('Update Zone') then
+                update_att_detect_cache()
+            end
+
+            imgui.Separator()
+
+            -- Suggested events for current zone
             do
                 local evs, zname
                 if attDetectedCache then
                     evs, zname = attDetectedCache.evs or {}, attDetectedCache.zone
                 else
                     local e2, z2 = resolve_events_for_current_zone()
-                    evs, zname = e2 or {}, z2
-                    if evs and #evs > 1 then sort_events_by_category_order(evs) end
+                    evs, zname   = e2 or {}, z2
+                    if evs and #evs > 1 then
+                        sort_events_by_category_order(evs)
+                    end
                 end
 
                 if evs and #evs > 0 then
@@ -1064,34 +1308,39 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
 
             imgui.Separator()
 
-            -- Category groups (in file order)
-            imgui.BeginChild('attend_list', {0, -40}, true)
-
+            -- Category list
+            imgui.BeginChild('attend_list', { 0, -40 }, true)
             for _, cat in ipairs(attendCategoriesOrder) do
                 local events = attendCategories[cat] or {}
                 if #events > 0 then
                     local header = string.format('%s (%d)', cat, #events)
                     if imgui.CollapsingHeader(header) then
                         for _, ev in ipairs(events) do
-                            local area = attSearchArea[ev] or (attCreditNames[ev] and attCreditNames[ev][1]) or ''
+                            local area = attSearchArea[ev] or
+                                         (attCreditNames[ev] and attCreditNames[ev][1]) or ''
+
                             if imgui.Button(string.format('%s##btn_%s', ev, ev)) then
                                 attend_launch_for_event(ev)
                             end
+
                             if area ~= '' then
                                 imgui.SameLine()
-                                imgui.TextDisabled(string.format(' /sea %s linkshell', area))
+                                imgui.TextDisabled(string.format(
+                                    '/sea %s linkshell%s',
+                                    area,
+                                    attendUseLS2 and '2' or ''
+                                ))
                             end
                         end
                     end
                 end
             end
-
             imgui.EndChild()
 
             imgui.Separator()
             if imgui.Button('Close##attend') then
                 isAttendLauncherOpen = false
-                openPtr[1] = false
+                openPtr[1]           = false
             end
 
             imgui.End()
