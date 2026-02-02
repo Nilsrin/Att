@@ -1,14 +1,14 @@
 Default,Current Zone
-faf,Fafnir/Nidhogg
-fafnir,Fafnir/Nidhogg
-nid,Fafnir/Nidhogg
-nidhogg,Fafnir/Nidhogg
-fafhogg,Fafnir/Nidhogg
-Faf,Fafnir/Nidhogg
-Fafnir,Fafnir/Nidhogg
-Nid,Fafnir/Nidhogg
-Nidhogg,Fafnir/Nidhogg
-Fafhogg,Fafnir/Nidhogg
+faf,Nidhogg
+fafnir,Nidhogg
+nid,Nidhogg
+nidhogg,Nidhogg
+fafhogg,Nidhogg
+Faf,Nidhogg
+Fafnir,Nidhogg
+Nid,Nidhogg
+Nidhogg,Nidhogg
+Fafhogg,Nidhogg
 jorm,Jormungand
 Jorm,Jormungand
 shiki,Shikigami Weapon
@@ -26,16 +26,16 @@ Ka,King Arthro
 kv,King Vinegarroon
 Kv,King Vinegarroon
 KV,King Vinegarroon
-kb,(King) Behemoth
-behe,(King) Behemoth
-Kb,(King) Behemoth
-Behe,(King) Behemoth
-turtle,Aspidochelone/Adamantoise
-aspi,Aspidochelone/Adamantoise
-aspid,Aspidochelone/Adamantoise
-Turtle,Aspidochelone/Adamantoise
-Aspi,Aspidochelone/Adamantoise
-Aspid,Aspidochelone/Adamantoise
+kb,King Behemoth
+behe,King Behemoth
+Kb,King Behemoth
+Behe,King Behemoth
+turtle,Aspidochelone
+aspi,Aspidochelone
+aspid,Aspidochelone
+Turtle,Aspidochelone
+Aspi,Aspidochelone
+Aspid,Aspidochelone
 kirin,Sky/Kirin
 sky,Sky/Kirin
 Kirin,Sky/Kirin

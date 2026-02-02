@@ -1,9 +1,9 @@
 Current Zone,
 
 -- HNMS,
-Fafnir/Nidhogg,Dragons_Aery,dragonaery
-(King) Behemoth,Behemoths_Dominion,behemotdom
-Aspidochelone/Adamantoise,Valley_of_Sorrows,sorrowvall
+Nidhogg,Dragons_Aery,dragonaery
+King Behemoth,Behemoths_Dominion,behemotdom
+Aspidochelone,Valley_of_Sorrows,sorrowvall
 Jormungand,Uleguerand_Range,uleguerand
 Tiamat,Attohwa_Chasm,attohwacsm
 Vrtra,King_Ranperres_Tomb,ranpstomb

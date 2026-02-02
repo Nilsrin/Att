@@ -1,27 +1,217 @@
-King Arthro:
-Required:
+>King Arthro<
+--Required:
 1: Tank
 1: WHM, RDM
 1: THF
 1: Stunner
-Suggested:
+--Suggested:
+--Parties:
+P1:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner
+P2:
+6: Damage
+P3:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner
 
-King Vinegarroon:
-Required:
+>King Vinegarroon<
+--Required:
 1: Tank
 1: Support
 1: THF
 1: Stunner
-Suggested:
+--Suggested:
 1: WHM
+--Parties:
+P1:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner
+P2:
+6: Damage
+P3:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner
 
-Serket:
-Required:
+>Serket<
+--Required:
 1: THF
 1: WHM, RDM, SMN
+--Suggested:
+--Parties:
+P1:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner
+P2:
+6: Damage
+P3:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner
 
-Simurgh:
-Required:
+>Shikigami Weapon<
+--Required:
+1: THF
+
+>Simurgh<
+--Required:
 1: THF
 1: WHM, RDM, SMN
+--Suggested:
+--Parties:
+P1:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner
+P2:
+6: Damage
+P3:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner
+
+>(King) Behemoth<
+--Required:
+3: Tank
+2: BRD
+2: WHM
+2: RDM
+1: THF
+--Suggested:
+--Parties:
+P1:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner
+P2:
+6: Damage
+P3:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner
+
+>Fafnir/Nidhogg<
+--Required:
+3: Tank
+2: BRD
+2: WHM
+2: RDM
+1: THF
+--Suggested:
+--Parties:
+P1:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner
+P2:
+6: Damage
+P3:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner
+
+>Aspidochelone<
+--Required:
+3: Tank
+2: BRD
+2: WHM
+2: RDM
+1: THF
+--Suggested:
+--Parties:
+P1:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner
+P2:
+6: Damage
+P3:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner
+
+>Tiamat<
+--Required:
+3: Tank
+2: BRD
+2: WHM
+2: RDM
+1: THF
+--Suggested:
+--Parties:
+P1:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner
+P2:
+6: Damage
+P3:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner
+
+>Jormungand<
+--Required:
+3: Tank
+2: BRD
+2: WHM
+2: RDM
+1: THF
+--Suggested:
+--Parties:
+P1:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner
+P2:
+6: Damage
+P3:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner
+
+>Vrtra<
+--Required:
+3: Tank
+2: BRD
+2: WHM
+2: RDM
+1: THF
+--Suggested:
+--Parties:
+P1:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner
+P2:
+6: Damage
+P3:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner
 

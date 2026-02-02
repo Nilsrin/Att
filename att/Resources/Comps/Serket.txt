@@ -1,0 +1,15 @@
+--Required:
+1: THF
+1: WHM, RDM, SMN
+
+--Suggested:
+
+--Parties:
+P1:
+1: THF
+1: WHM, RDM
+4: Any
+P2:
+6: Damage
+P3:
+6: Any

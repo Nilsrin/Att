@@ -1,0 +1,19 @@
+--Required:
+1: THF
+1: WHM, RDM, SMN
+
+--Suggested:
+
+--Parties:
+P1:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner
+P2:
+6: Damage
+P3:
+1: Tank
+1: WHM, RDM
+1: THF
+1: Stunner

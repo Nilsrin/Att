@@ -1,0 +1,26 @@
+--Required:
+2: Tank
+1: WHM
+1: RDM
+1: BRD
+1: THF
+
+--Suggested:
+1: Tank
+6: SMN, BLM
+
+--Parties:
+P1:
+3: PLD
+1: WHM
+1: RDM
+1: BRD
+P2:
+1: THF
+3: SMN, BLM
+1: BRD
+1: WHM
+P3:
+4: SMN, BLM
+1: BRD
+1: RDM

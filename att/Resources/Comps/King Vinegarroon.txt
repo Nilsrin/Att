@@ -1,0 +1,25 @@
+--Required:
+1: Tank
+1: WHM, RDM, SMN
+2: Support
+1: BRD
+1: Stunner
+
+--Suggested:
+5: DRK
+2: BRD
+
+
+--Parties:
+P1:
+1: Tank
+1: WHM
+1: Stunner
+1: BRD
+2: Support
+P2:
+5: Damage
+1: BRD
+P3:
+5: DRK
+1: BRD

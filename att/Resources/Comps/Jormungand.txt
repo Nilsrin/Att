@@ -1,0 +1,29 @@
+--Required:
+1: PLD
+1: Tank
+1: WHM
+1: RDM
+1: Stunner
+1: THF
+1: BRD
+
+--Suggested:
+10: SMN
+1: Stunner
+1: BRD
+
+--Parties:
+P1:
+2: Tank
+1: WHM
+1: SMN
+1: BRD
+1: RDM
+
+P2:
+5: SMN
+1: Stunner
+
+P3:
+5: SMN
+1: BRD
