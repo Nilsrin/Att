@@ -1,8 +1,8 @@
 -- att.lua (Refactored)
 addon.name    = 'att'
 addon.author  = 'Nils'
-addon.version = '4.0'
-addon.desc    = 'Attendance manager'
+addon.version = '4.1.8'
+addon.desc    = 'Attendance manager (Modular)'
 
 require('common')
 
@@ -577,6 +577,27 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
 
     -- CALLBACKS for UI
     local callbacks = {
+        on_party_only = function()
+            local pm = AshitaCore:GetMemoryManager():GetParty()
+            if not pm then return end
+            
+            local partyNames = {}
+            for i = 0, 17 do
+                local name = pm:GetMemberName(i)
+                if name and type(name) == 'string' and #name > 0 then
+                    partyNames[name:lower()] = true
+                end
+            end
+            
+            local filtered = {}
+            for _, r in ipairs(attendance.data) do
+                local cleanName = r.name:gsub('^X%s+', ''):lower()
+                if partyNames[cleanName] then
+                    table.insert(filtered, r)
+                end
+            end
+            attendance.data = filtered
+        end,
         on_write = function(close)
             local _, msg = attendance.write_file(addon.path, state.selectedMode, state.pendingEventName)
             if msg then AshitaCore:GetChatManager():QueueCommand(1, ls_prefix() .. msg) end

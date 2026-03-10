@@ -56,6 +56,11 @@ function ui.draw_attendance_window(is_open, att_module, state, callbacks)
 
         imgui.Text('Attendees: ' .. #att_module.data)
 
+        if imgui.Button('Party Only') then
+            if callbacks.on_party_only then callbacks.on_party_only() end
+        end
+        imgui.SameLine()
+
         if imgui.Button('Rescan') then
             att_module.gather_zone(state.pendingEventName)
         end
