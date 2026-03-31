@@ -22,6 +22,11 @@ local ui         = require('ui')
 local constants  = require('constants')
 local comp       = require('comp')
 local messages   = require('messages')
+local settings   = require('settings')
+
+local config = settings.load(T{
+    autoPopout = true,
+})
 
 -- Global State
 local state = {
@@ -34,6 +39,8 @@ local state = {
     isAttendLauncherOpen   = false,
     isHelpWindowOpen       = false,
     isDebugWindowOpen      = false,
+    isPopoutOpen           = false,
+    autoPopout             = config.autoPopout,
 
     pendingEventName     = nil,
     pendingFilePath      = nil,
@@ -44,7 +51,7 @@ local state = {
     pendingComp          = nil, -- { eventName, fireAt }
 
     attendUseLS2         = false,
-    attendDelaySec       = 2,
+    attendDelaySec       = 3,
     attendSelfAttest     = false,
 
     selfAttendanceStart  = nil,
@@ -556,6 +563,15 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
     local zidNow = memory.get_current_zone_id()
     if zidNow ~= state.lastDetectedZid then
         update_suggestions()
+        
+        -- Auto-open or close popout based on events in the new zone
+        if state.autoPopout then
+            if state.suggestions and state.suggestions.evs and #state.suggestions.evs > 0 then
+                state.isPopoutOpen = true
+            else
+                state.isPopoutOpen = false
+            end
+        end
     end
     
     if state.attForceRefreshAt and os.clock() >= state.attForceRefreshAt then
@@ -633,6 +649,19 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
                  
                  state.pendingSeaScan = { fireAt = os.clock() + (state.attendDelaySec or 2) }
              end
+        end,
+        on_auto_popout_change = function(val)
+             config.autoPopout = val
+             settings.save(config) -- Pass config table to save
+             state.autoPopout = val -- Update runtime state
+             if not val then
+                  state.isPopoutOpen = false
+             else
+                  update_suggestions()
+                  if state.suggestions and state.suggestions.evs and #state.suggestions.evs > 0 then
+                       state.isPopoutOpen = true
+                  end
+             end
         end
     }
 
@@ -643,6 +672,10 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
     
     if state.isAttendLauncherOpen then
         state.isAttendLauncherOpen = ui.draw_launcher(state.isAttendLauncherOpen, state, callbacks)
+    end
+    
+    if state.isPopoutOpen then
+        state.isPopoutOpen = ui.draw_popout(state.isPopoutOpen, state, callbacks)
     end
     
     if comp.isOpen then

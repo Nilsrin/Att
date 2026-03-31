@@ -143,6 +143,15 @@ function ui.draw_launcher(is_open, state, callbacks)
         if imgui.Button('Update Zone') then
             if callbacks.on_update_zone then callbacks.on_update_zone() end
         end
+        imgui.SameLine()
+        if imgui.Button('Popout') then
+            state.isPopoutOpen = not state.isPopoutOpen
+        end
+        imgui.SameLine()
+        local autoPopoutPtr = { state.autoPopout }
+        if imgui.Checkbox('Auto', autoPopoutPtr) then
+            if callbacks.on_auto_popout_change then callbacks.on_auto_popout_change(autoPopoutPtr[1]) end
+        end
         imgui.Separator()
         
         -- Suggestions
@@ -407,5 +416,46 @@ end
 
 -- Debug window removed
 
+function ui.draw_popout(is_open, state, callbacks)
+    if not is_open then return false end
+
+    local evs = state.suggestions and state.suggestions.evs
+    local firstEvent = (evs and #evs > 0) and evs[1] or "No Event"
+
+    local btnHeight = 45
+    local winHeight = 35
+    if evs and #evs > 0 then
+        winHeight = winHeight + btnHeight + 10
+        if #evs > 1 then
+            winHeight = winHeight + (#evs - 1) * (btnHeight + 10)
+        end
+    else
+        winHeight = 80
+    end
+
+    imgui.SetNextWindowSize({ 220, winHeight }, ImGuiCond_Always)
+
+    local openPtr = { is_open }
+    if imgui.Begin('{Attend}###ZonePopout', openPtr) then
+        if evs and #evs > 0 then
+            if imgui.Button(firstEvent .. '##popout_ev_1', { -1, btnHeight }) then
+                if callbacks.on_launch_event then callbacks.on_launch_event(firstEvent) end
+            end
+
+            if #evs > 1 then
+                imgui.Separator()
+                for i = 2, #evs do
+                    if imgui.Button(evs[i] .. '##popout_ev_' .. i, { -1, btnHeight }) then
+                        if callbacks.on_launch_event then callbacks.on_launch_event(evs[i]) end
+                    end
+                end
+            end
+        else
+            imgui.TextDisabled('No events for this zone.')
+        end
+        imgui.End()
+    end
+    return openPtr[1]
+end
 
 return ui
