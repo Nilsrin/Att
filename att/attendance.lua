@@ -1,10 +1,8 @@
 -- attendance.lua
 local attendance = {}
-local attendance = {}
 
 local resources = require('resources')
 local memory    = require('memory')
-local helpers   = require('helpers')
 local helpers   = require('helpers')
 local constants = require('constants')
 local messages  = require('messages')
@@ -52,7 +50,7 @@ function attendance.sort()
     end)
 end
 
-function attendance.add_entry(name, mj_id, sj_id, zid, force_time)
+function attendance.add_entry(name, mj_id, sj_id, zid, force_time, late)
     local zname = resources.attZoneList[zid] or 'UnknownZone'
     local jobsMain = resources.attJobList[mj_id] or 'NONE'
     local jobsSub  = resources.attJobList[sj_id] or 'NONE'
@@ -63,14 +61,12 @@ function attendance.add_entry(name, mj_id, sj_id, zid, force_time)
         jobsSub  = jobsSub,
         zone     = zname,
         zid      = zid,
-        time     = force_time or os.date('%H:%M:%S')
+        time     = force_time or os.date('%H:%M:%S'),
+        late     = late
     })
 end
 
--- function attendance.gather_alliance(eventName) -- Removed
--- end
-
-function attendance.gather_zone(eventName)
+function attendance.gather_zone(eventName, is_sa, is_late)
     local entries = memory.scan_zone_list()
     local seen = {}
     for _, row in ipairs(attendance.data) do
@@ -88,7 +84,11 @@ function attendance.gather_zone(eventName)
         end
 
         if not is_seen and is_credit then
-            attendance.add_entry(name, info.mj, info.sj, info.zid)
+            local entry_name = name
+            if is_sa then
+                entry_name = 'X ' .. name
+            end
+            attendance.add_entry(entry_name, info.mj, info.sj, info.zid, nil, is_late)
             seen[key] = true
             added = added + 1
         end
@@ -178,8 +178,10 @@ function attendance.write_file(addon_path, mode, eventName)
     end
 
     local count = 0
+    -- Write Present (confirmed, not late)
     for _, row in ipairs(attendance.data) do
-        if not row.name:match('^X ') then
+        local is_pending = row.name:match('^X ')
+        if not is_pending and not row.late then
             f:write(string.format(
                 '%s,%s,%s,%s,%s,%s\n',
                 row.name,
@@ -192,6 +194,34 @@ function attendance.write_file(addon_path, mode, eventName)
             count = count + 1
         end
     end
+
+    -- Write Late (both confirmed and unconfirmed)
+    local has_late = false
+    for _, row in ipairs(attendance.data) do
+        if row.late then
+            has_late = true
+            break
+        end
+    end
+
+    if has_late then
+        f:write('[Late]\n')
+        for _, row in ipairs(attendance.data) do
+            if row.late then
+                f:write(string.format(
+                    '%s,%s,%s,%s,%s,%s\n',
+                    row.name,
+                    row.jobsMain,
+                    os.date('%m/%d/%Y'),
+                    os.date('%H:%M:%S'),
+                    row.zone,
+                    eventName
+                ))
+                count = count + 1
+            end
+        end
+    end
+
     f:close()
     
     return count, msg

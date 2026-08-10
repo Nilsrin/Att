@@ -1,17 +1,19 @@
 -- att.lua (Refactored)
 addon.name    = 'att'
 addon.author  = 'Nils'
-addon.version = '4.1.8'
-addon.desc    = 'Attendance manager (Modular)'
+addon.version = '5.0.0'
+addon.desc    = 'Attendance manager'
 
 require('common')
 
--- Setup package path to include the current directory (New Att)
--- Assuming this file is in .../att/New Att/
-local folderPath = addon.path .. 'New Att\\'
-package.path = package.path .. ';' .. folderPath .. '?.lua'
-
 local imgui      = require('imgui')
+
+-- Localized modules/globals for performance optimization
+local os         = os
+local string     = string
+local table      = table
+local math       = math
+local AshitaCore = AshitaCore
 local chat       = require('chat')
 local struct     = require('struct')
 local resources  = require('resources')
@@ -20,27 +22,86 @@ local attendance = require('attendance')
 local helpers    = require('helpers')
 local ui         = require('ui')
 local constants  = require('constants')
-local comp       = require('comp')
 local messages   = require('messages')
-local settings   = require('settings')
+local function serialize(val)
+    local t = type(val)
+    if t == "number" then
+        return tostring(val)
+    elseif t == "boolean" then
+        return tostring(val)
+    elseif t == "string" then
+        return string.format("%q", val)
+    elseif t == "table" then
+        local parts = {}
+        for k, v in pairs(val) do
+            local key_str
+            if type(k) == "string" then
+                key_str = string.format("[%q]", k)
+            else
+                key_str = string.format("[%s]", tostring(k))
+            end
+            table.insert(parts, key_str .. " = " .. serialize(v))
+        end
+        return "{\n" .. table.concat(parts, ",\n") .. "\n}"
+    else
+        return "nil"
+    end
+end
 
-local config = settings.load(T{
-    autoPopout = true,
-})
+local function load_config()
+    local path = addon.path .. 'config.lua'
+    local f = loadfile(path)
+    if f then
+        local success, res = pcall(f)
+        if success and type(res) == 'table' then
+            local loaded = {
+                autoPopout = true,
+                selfAttestEvents = {},
+                defaultLS2 = false
+            }
+            if type(res.autoPopout) == 'boolean' then loaded.autoPopout = res.autoPopout end
+            if type(res.defaultLS2) == 'boolean' then loaded.defaultLS2 = res.defaultLS2 end
+            if type(res.selfAttestEvents) == 'table' then
+                for k, v in pairs(res.selfAttestEvents) do
+                    loaded.selfAttestEvents[k] = v
+                end
+            end
+            return loaded
+        end
+    end
+    return {
+        autoPopout = true,
+        selfAttestEvents = {},
+        defaultLS2 = false
+    }
+end
+
+local function save_config(cfg)
+    local path = addon.path .. 'config.lua'
+    local file = io.open(path, 'w')
+    if file then
+        file:write("return " .. serialize(cfg))
+        file:close()
+    end
+end
+
+local config = load_config()
 
 -- Global State
 local state = {
     debugMode    = false,
     selectedMode = 'HNM',
     g_SAMode     = false,
-    g_LSMode     = nil, -- 'ls' or 'ls2'
+    g_LSMode     = config.defaultLS2 and 'ls2' or 'ls',
     
     isAttendanceWindowOpen = false,
     isAttendLauncherOpen   = false,
-    isHelpWindowOpen       = false,
     isDebugWindowOpen      = false,
     isPopoutOpen           = false,
+    isPreferencesWindowOpen = false,
     autoPopout             = config.autoPopout,
+    selfAttestEvents       = config.selfAttestEvents,
+    defaultLS2             = config.defaultLS2,
 
     pendingEventName     = nil,
     pendingFilePath      = nil,
@@ -48,15 +109,17 @@ local state = {
     pendingAttend        = nil, -- { eventName, useLS2, selfAttest, fireAt }
     pendingSeaScan       = nil,
     pendingGather        = nil, -- { eventName, fireAt }
-    pendingComp          = nil, -- { eventName, fireAt }
 
-    attendUseLS2         = false,
+    attendUseLS2         = config.defaultLS2,
     attendDelaySec       = 3,
     attendSelfAttest     = false,
 
     selfAttendanceStart  = nil,
     saTimerDuration      = constants.DEFAULT_SA_DURATION,
     saReminderIntervals  = {},
+    saAnnounced2Min      = false,
+    saAnnounced1Min      = false,
+    saAnnounced30Sec     = false,
     
     scanNextLetter       = nil,
     
@@ -112,9 +175,38 @@ local function update_suggestions()
     state.lastDetectedZid = zid
 end
 
+local function get_sa_flags()
+    local is_sa = state.g_SAMode
+    local is_late = false
+    if is_sa and state.selfAttendanceStart then
+        local elapsed = os.time() - state.selfAttendanceStart
+        if state.saTimerDuration - elapsed <= 30 then
+            is_late = true
+        end
+    end
+    return is_sa, is_late
+end
+
+local function get_search_area(eventName)
+    if resources.attSearchArea[eventName] then
+        return resources.attSearchArea[eventName]
+    end
+    
+    local zoneName = eventName
+    if resources.attCreditNames[eventName] and resources.attCreditNames[eventName][1] then
+        zoneName = resources.attCreditNames[eventName][1]
+    end
+    
+    local searchArea = resources.zoneToSearchArea[zoneName]
+    if not searchArea then
+        -- Fallback: take the first part of the zone name before any underscore/space/dash
+        searchArea = zoneName:gsub('%-', '_'):match('^[^%s_]+') or zoneName
+    end
+    return searchArea
+end
+
 local function queue_attend_launch(eventName)
-    local area = resources.attCreditNames[eventName] and resources.attCreditNames[eventName][1]
-    if resources.attSearchArea[eventName] then area = resources.attSearchArea[eventName] end
+    local area = get_search_area(eventName)
     
     if not area or area == '' then
         print(string.format('[att] No search area found for "%s".', eventName))
@@ -130,7 +222,7 @@ local function queue_attend_launch(eventName)
     state.pendingAttend = {
         eventName  = eventName,
         useLS2     = state.attendUseLS2,
-        selfAttest = state.attendSelfAttest,
+        selfAttest = state.attendSelfAttest or (state.selfAttestEvents[eventName] == true),
         fireAt     = os.clock() + delay,
     }
 end
@@ -144,8 +236,23 @@ ashita.events.register('command', 'att_command_cb', function(e)
     if #args == 0 or args[1]:lower() ~= '/att' then return end
     e.blocked = true
 
-    if #args == 2 and args[2]:lower() == 'help' then
-        state.isHelpWindowOpen = true
+    if #args == 1 then
+        print(chat.header('att') .. 'Available Commands:')
+        print(' - /att pref : Toggles the preference settings window.')
+        print(' - /att here : Scans attendance for the current zone\'s event.')
+        print(' - /att all : Scans all online linkshell members.')
+        print(' - /att [ls / ls2] [h / e] [sa] <event> : Scans a specific event.')
+        print('      - ls / ls2: Linkshell 1 or 2 (Default: ' .. (state.defaultLS2 and 'LS2' or 'LS') .. ')')
+        print('      - h / e: Auto-save to HNM (h) or Event (e) format')
+        print('      - sa: Run in Self-Attendance check-in mode')
+        print(' - /att debug / debugmode : Developer tools.')
+        print(' - /attend : Toggles the attendance launcher dashboard GUI.')
+        return
+    end
+
+    -- /att pref
+    if #args == 2 and args[2]:lower() == 'pref' then
+        state.isPreferencesWindowOpen = not state.isPreferencesWindowOpen
         return
     end
 
@@ -260,6 +367,9 @@ ashita.events.register('command', 'att_command_cb', function(e)
     end
 
     local alias = table.concat(aliasParts, ' '):gsub('^"(.*)"$', '%1')
+    if lsMode == nil then
+        lsMode = state.defaultLS2 and 'ls2' or 'ls'
+    end
     state.g_LSMode = lsMode
 
     -- Resolve Event
@@ -279,10 +389,18 @@ ashita.events.register('command', 'att_command_cb', function(e)
     end
 
     -- SA MODE
-    if saFlag then
+    local isSelfAttest = saFlag
+    if state.selfAttestEvents[state.pendingEventName] and not (alias == '' and state.pendingEventName == 'Current Zone') then
+        isSelfAttest = true
+    end
+
+    if isSelfAttest then
         state.g_SAMode = true
         state.selfAttendanceStart = os.time()
         state.saTimerDuration = constants.DEFAULT_SA_DURATION
+        state.saAnnounced2Min = false
+        state.saAnnounced1Min = false
+        state.saAnnounced30Sec = false
         -- (Ideally load from satimers.txt here, skipping file io for brevity, use defaults)
         
         attendance.build_credit_roster(state.pendingEventName)
@@ -300,8 +418,7 @@ ashita.events.register('command', 'att_command_cb', function(e)
 
     -- POPULATION / GATHER FLOW
     -- 1. Determine Search Area
-    local area = resources.attCreditNames[state.pendingEventName] and resources.attCreditNames[state.pendingEventName][1]
-    if resources.attSearchArea[state.pendingEventName] then area = resources.attSearchArea[state.pendingEventName] end
+    local area = get_search_area(state.pendingEventName)
     
     local doSearch = true
     if state.skipNextSearch then
@@ -330,11 +447,12 @@ ashita.events.register('command', 'att_command_cb', function(e)
         return
     else
         -- Fallback OR Skipped Search: Immediate Gather
+        local is_sa, is_late = get_sa_flags()
         if lsMode then
-            attendance.gather_zone(state.pendingEventName)
+            attendance.gather_zone(state.pendingEventName, is_sa, is_late)
         else
             -- attendance.gather_alliance(state.pendingEventName) -- Removed
-            attendance.gather_zone(state.pendingEventName)
+            attendance.gather_zone(state.pendingEventName, is_sa, is_late)
         end
         
         if writeMode then
@@ -363,80 +481,6 @@ ashita.events.register('command', 'att_attend_cmd', function(e)
     
     if state.isAttendLauncherOpen then
         update_suggestions()
-    end
-end)
-
--- /comp
-ashita.events.register('command', 'att_comp_cmd', function(e)
-    local args = e.command:args()
-    if #args == 0 or args[1]:lower() ~= '/comp' then return end
-    e.blocked = true
-
-    if #args < 2 then
-        print('[att] Usage: /comp <event_name> | /comp list')
-        return
-    end
-
-    if args[2]:lower() == 'list' then
-        print('[att] Available Compositions:')
-        local keys = {}
-        for k in pairs(resources.compositions) do table.insert(keys, k) end
-        table.sort(keys)
-        for _, k in ipairs(keys) do
-            print(' - ' .. k)
-        end
-        return
-    end
-
-    local aliasParts = {}
-    for i = 2, #args do table.insert(aliasParts, args[i]) end
-    local alias = table.concat(aliasParts, ' '):gsub('^"(.*)"$', '%1'):lower()
-    
-    -- Resolve Event Name
-    local eventName = resources.attShortNames[alias] or alias
-    -- Try case-insensitive match on compositions keys if not found
-    if not resources.compositions[eventName] then
-        for k, v in pairs(resources.compositions) do
-            if k:lower() == eventName:lower() then
-                eventName = k
-                break
-            end
-        end
-    end
-    -- Try substring match if still not found
-    if not resources.compositions[eventName] then
-        for k, v in pairs(resources.compositions) do
-            if k:lower():find(alias, 1, true) then
-                eventName = k
-                break
-            end
-        end
-    end
-
-    if not resources.compositions[eventName] then
-        print('[att] No composition found for event: ' .. eventName)
-        return
-    end
-
-    -- Refresh roster first
-    -- Determine area to scan
-    local area = resources.attCreditNames[eventName] and resources.attCreditNames[eventName][1]
-    area = resources.attSearchArea[eventName] or area
-    
-    if area and area ~= '' then
-        -- Trigger search first
-        local lsSearch = state.attendUseLS2 and 'linkshell2' or 'linkshell'
-        local delay = tonumber(state.attendDelaySec) or 2
-        AshitaCore:GetChatManager():QueueCommand(1, string.format('/sea %s %s', area, lsSearch))
-        
-        print('[att] Scanning ' .. area .. ' for ' .. eventName .. ' (Please wait)...')
-        
-        state.pendingComp = {
-            eventName = eventName,
-            fireAt = os.clock() + delay
-        }
-    else
-        print('[att] Could not determine zone for ' .. eventName)
     end
 end)
 
@@ -485,7 +529,8 @@ ashita.events.register('packet_in', 'att_packet_in', function(e)
          
          -- Add new
          local zid = memory.get_current_zone_id()
-         attendance.add_entry(char, 0, 0, zid)
+         local _, is_late = get_sa_flags()
+         attendance.add_entry(char, 0, 0, zid, nil, is_late)
          attendance.sort()
     end
 end)
@@ -509,32 +554,10 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
 
     -- Pending Sea Scan
     if state.pendingSeaScan and os.clock() >= state.pendingSeaScan.fireAt then
-        attendance.gather_zone(state.pendingEventName)
+        local is_sa, is_late = get_sa_flags()
+        attendance.gather_zone(state.pendingEventName, is_sa, is_late)
         state.pendingSeaScan = nil
     end
-
-    -- Comp Async Evaluation
-    if state.pendingComp and os.clock() >= state.pendingComp.fireAt then
-        local ev = state.pendingComp.eventName
-        attendance.clear()
-        -- FIX: Gather Alliance FIRST, then Zone. 
-        -- gather_zone respects existing entries in data, gather_alliance does not checks.
-        -- gather_zone respects existing entries in data
-        -- attendance.gather_alliance(ev) -- Removed as per user request (redundant/broken)
-        attendance.gather_zone(ev)
-        
-        local res, err = comp.evaluate(ev, attendance.data)
-        if not res then
-            print('[att] Error evaluating: ' .. tostring(err))
-        else
-            -- Auto-Build Parties
-            print('[att] Auto-Building Parties for ' .. ev)
-            local bpRes, bpErr = comp.build_parties(ev, attendance.data)
-            if not bpRes then print('[att] Build Error: ' .. tostring(bpErr)) end
-        end
-        state.pendingComp = nil
-    end
-
     -- Pending Gather (Normal /att flow)
     if state.pendingGather and os.clock() >= state.pendingGather.fireAt then
         local ev = state.pendingGather.eventName
@@ -544,7 +567,8 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
         -- Gather
         -- Gather
         -- attendance.gather_alliance(ev) -- Removed
-        attendance.gather_zone(ev)     -- Then scan zone/search results
+        local is_sa, is_late = get_sa_flags()
+        attendance.gather_zone(ev, is_sa, is_late)     -- Then scan zone/search results
         
         -- Handle Write if requested
         if state.pendingGather.writeMode then
@@ -582,6 +606,50 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
     -- SA Timers (Simplified logic for brevity)
     if state.g_SAMode and state.selfAttendanceStart then
         local elapsed = os.time() - state.selfAttendanceStart
+        local remaining = state.saTimerDuration - elapsed
+        if remaining < 0 then remaining = 0 end
+
+        -- 2 minutes left announcement (120 seconds remaining)
+        if remaining <= 120 and not state.saAnnounced2Min then
+            local missing = {}
+            for _, row in ipairs(attendance.data) do
+                if row.name:match('^X ') then
+                    table.insert(missing, row.name:sub(3))
+                end
+            end
+            local missingStr = #missing > 0 and table.concat(missing, ', ') or 'None'
+            AshitaCore:GetChatManager():QueueCommand(1, ls_prefix() .. string.format(messages.SA_REMAINING_2MIN, missingStr))
+            state.saAnnounced2Min = true
+        end
+
+        -- 1 minute left announcement (60 seconds remaining)
+        if remaining <= 60 and not state.saAnnounced1Min then
+            local missing = {}
+            for _, row in ipairs(attendance.data) do
+                if row.name:match('^X ') then
+                    table.insert(missing, row.name:sub(3))
+                end
+            end
+            local missingStr = #missing > 0 and table.concat(missing, ', ') or 'None'
+            AshitaCore:GetChatManager():QueueCommand(1, ls_prefix() .. string.format(messages.SA_REMAINING_1MIN, missingStr))
+            state.saAnnounced1Min = true
+        end
+
+        -- 30 seconds left announcement (30 seconds remaining)
+        if remaining <= 30 and not state.saAnnounced30Sec then
+            local missing = {}
+            for _, row in ipairs(attendance.data) do
+                if row.name:match('^X ') then
+                    table.insert(missing, row.name:sub(3))
+                    row.late = true
+                end
+            end
+            local missingStr = #missing > 0 and table.concat(missing, ', ') or 'None'
+            AshitaCore:GetChatManager():QueueCommand(1, ls_prefix() .. string.format(messages.SA_REMAINING_30SEC, missingStr))
+            state.saAnnounced30Sec = true
+        end
+
+        -- Complete
         if elapsed >= state.saTimerDuration then
              local _, msg = attendance.write_file(addon.path, state.selectedMode, state.pendingEventName)
              if msg then AshitaCore:GetChatManager():QueueCommand(1, ls_prefix() .. msg) end
@@ -641,8 +709,7 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
         end,
         on_update_zone = function() update_suggestions() end,
         on_scan_letter = function(letter)
-             local area = resources.attCreditNames[state.pendingEventName] and resources.attCreditNames[state.pendingEventName][1]
-             area = resources.attSearchArea[state.pendingEventName] or area
+             local area = get_search_area(state.pendingEventName)
              if area and area ~= '' then
                  local lsSearch = (state.g_LSMode == 'ls2') and 'linkshell2' or 'linkshell'
                  AshitaCore:GetChatManager():QueueCommand(1, string.format('/sea %s %s %s', area, lsSearch, letter))
@@ -652,8 +719,8 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
         end,
         on_auto_popout_change = function(val)
              config.autoPopout = val
-             settings.save(config) -- Pass config table to save
-             state.autoPopout = val -- Update runtime state
+             save_config(config)
+             state.autoPopout = val
              if not val then
                   state.isPopoutOpen = false
              else
@@ -662,6 +729,16 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
                        state.isPopoutOpen = true
                   end
              end
+        end,
+        on_self_attest_change = function()
+             save_config(config)
+        end,
+        on_default_ls2_change = function(val)
+             config.defaultLS2 = val
+             save_config(config)
+             state.defaultLS2 = val
+             state.attendUseLS2 = val
+             state.g_LSMode = val and 'ls2' or 'ls'
         end
     }
 
@@ -678,8 +755,8 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
         state.isPopoutOpen = ui.draw_popout(state.isPopoutOpen, state, callbacks)
     end
     
-    if comp.isOpen then
-        comp.isOpen = ui.draw_composition_window(comp.isOpen, comp, attendance)
+    if state.isPreferencesWindowOpen then
+        state.isPreferencesWindowOpen = ui.draw_preferences_window(state.isPreferencesWindowOpen, state, callbacks)
     end
     
     -- Debug window call removed

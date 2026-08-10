@@ -1,7 +1,8 @@
 -- memory.lua
 local memory = {}
-local memory = {}
 
+-- Stride Cache
+local detectedStride = nil
 
 -- Constants from Reference Logic
 local STRIDE_CANDIDATES = { 0x4C, 0x50 }
@@ -148,8 +149,12 @@ function memory.scan_zone_list()
     if listPtr == 0 then return resultList end
     if count > 4096 then count = 4096 end
     
-    -- 3. Detect Stride
-    local stride = detect_stride(count, listPtr)
+    -- 3. Detect Stride (or use cached)
+    local stride = detectedStride
+    if not stride then
+        stride = detect_stride(count, listPtr)
+        detectedStride = stride
+    end
     
     -- 4. Inclusive Scan (loop 0 to count, AND count+1)
     for i = 0, count do

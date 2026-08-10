@@ -29,4 +29,10 @@ messages.EVENT_TAKEN = DEC_EV .. " Event Attendance taken for: %s " .. DEC_EV
 -- Params: List of names (comma separated)
 messages.PENDING_LIST = STAR_SOLID .. " Pending: %s " .. STAR_SOLID
 
+-- Self-attendance time warnings
+-- Params: List of names (comma separated)
+messages.SA_REMAINING_2MIN = STAR_HOLLOW .. " 2 minutes left! Missing: %s " .. STAR_HOLLOW
+messages.SA_REMAINING_1MIN = STAR_HOLLOW .. " 1 minute left! Missing: %s " .. STAR_HOLLOW
+messages.SA_REMAINING_30SEC = STAR_SOLID .. " 30 seconds left! Missing: %s (Moved to Late) " .. STAR_SOLID
+
 return messages

@@ -9,12 +9,12 @@ resources.attCreditNames    = {} -- [Event] = { zone1, zone2, ... }
 resources.attCreditZoneIds  = {} -- [Event] = { [zid]=true, ... }
 resources.attSearchArea     = {} -- [Event] = "Area"
 resources.zoneNameToIds     = {} -- [normZoneName] = { [zid]=true, ... }
+resources.zoneToSearchArea  = {} -- [ZoneName] = "SearchArea"
 
 resources.attendCategories      = {} -- [category] = { event1, ... }
 resources.attendCategoriesOrder = {} -- { category1, ... }
 resources.uncategorizedEvents   = {}
 
-resources.compositions          = {} -- [EventName] = { required = {}, suggested = {}, parties = {} }
 resources.attRoleDefinitions    = {
     ['tank']    = { 'PLD', 'NIN' },
     ['support'] = { 'WHM', 'RDM', 'SMN', 'BRD' },
@@ -76,8 +76,7 @@ function resources.load(addon_path)
         zones = 0,
         jobs = 0,
         shortNames = 0,
-        creditEvents = 0,
-        compositions = 0
+        creditEvents = 0
     }
     
     local function ensure_category(cat)
@@ -103,6 +102,10 @@ function resources.load(addon_path)
                     ev   = trim(ev)
                     zone = trim(zone or '')
                     area = trim(area or '')
+                    
+                    if zone ~= '' and area ~= '' then
+                        resources.zoneToSearchArea[zone] = area
+                    end
                     
                     resources.loadedInfo.creditEvents = resources.loadedInfo.creditEvents + 1
                     resources.attCreditNames[ev]   = resources.attCreditNames[ev]   or {}
@@ -183,115 +186,6 @@ function resources.load(addon_path)
             table.insert(resources.attendCategories[cat], ev)
         end
         table.insert(resources.attendCategoriesOrder, cat)
-    end
-
-    -- comps.txt
-    local currentCompEvent = nil
-    local currentCompSection = nil -- 'Required' or 'Suggested' or specific Party
-    local currentPartyIndex = nil -- Track P1, P2 context
-    
-    local parse_role_line = function(line)
-        local count, role = line:match('^(%d+):%s*(.+)$')
-        if count and role then
-            return tonumber(count), trim(role)
-        end
-        return nil, nil
-    end
-
-    -- Load Compositions from Resources/Comps/*.txt
-    local compsDir = resPath .. 'Comps\\'
-    -- SILENCED: print('[att] Scanning for compositions in: ' .. compsDir)
-    
-    local function get_files(path)
-        -- Helper to list files
-        local i, t, popen = 0, {}, io.popen
-        local pfile = popen('dir /b "'..path..'"')
-        if not pfile then return nil end
-        for filename in pfile:lines() do
-            if filename:match('%.txt$') then
-                i = i + 1
-                t[i] = filename
-            end
-        end
-        pfile:close()
-        return t
-    end
-    
-    local files = get_files(compsDir)
-    if files then
-        for _, filename in ipairs(files) do
-            local eventKey = filename:gsub('%.txt$', '')
-            -- Capitalize first letter for display niceness
-            eventKey = eventKey:sub(1,1):upper() .. eventKey:sub(2)
-            
-            -- SILENCED: print('[att] Parsing comp file: ' .. filename .. ' -> ' .. eventKey)
-            
-            resources.compositions[eventKey] = { required = {}, suggested = {}, parties = {} }
-            resources.loadedInfo.compositions = resources.loadedInfo.compositions + 1
-            
-            currentCompEvent = eventKey
-            currentCompSection = nil
-            currentPartyIndex = nil
-            
-            for raw in io.lines(compsDir .. filename) do
-                local line = trim(raw)
-                if line ~= '' then
-                    -- Parsing Logic for File-Per-Event (using --Header and P1:)
-                    
-                    if line:match('^%-%-.*:$') then
-                        -- Section Header: --Required:, --Suggested:, --Parties:
-                        local secHeader = line:match('^%-%-(.-):$')
-                        if secHeader == 'Required' then
-                            currentCompSection = 'required'
-                        elseif secHeader == 'Suggested' then
-                            currentCompSection = 'suggested'
-                        elseif secHeader == 'Parties' then
-                            currentCompSection = 'parties'
-                            currentPartyIndex = nil
-                            resources.compositions[eventKey].parties = {}
-                            -- SILENCED: print('[att] Found Parties Section for ' .. eventKey)
-                        end
-                        
-                    elseif currentCompSection then
-                        if currentCompSection == 'parties' then
-                            -- Check for P<n>:
-                            local pIdx = line:match('^[Pp](%d+):')
-                            if pIdx then
-                                 currentPartyIndex = tonumber(pIdx)
-                                 local pt = resources.compositions[eventKey].parties
-                                 pt[currentPartyIndex] = pt[currentPartyIndex] or {}
-                                 -- SILENCED: print('[att] Found Party Index: ' .. pIdx)
-                            elseif currentPartyIndex then
-                                 -- Role Line
-                                 local count, roleName = parse_role_line(line)
-                                 if count and roleName then
-                                     for i = 1, count do
-                                         table.insert(resources.compositions[eventKey].parties[currentPartyIndex], roleName)
-                                     end
-                                 else
-                                     if line:match('^%-%-+$') then
-                                         table.insert(resources.compositions[eventKey].parties[currentPartyIndex], 'Any')
-                                     else
-                                         table.insert(resources.compositions[eventKey].parties[currentPartyIndex], line)
-                                     end
-                                 end
-                            end
-                        else
-                            -- Required/Suggested
-                            local count, roleObj = parse_role_line(line)
-                            if count then
-                                local entry = { count=count, role=roleObj }
-                                table.insert(resources.compositions[eventKey][currentCompSection], entry)
-                            end
-                        end
-                    end
-                end
-            end
-            -- print('[att] Loaded comp: ' .. eventKey) -- Silenced as requested
-        end
-        print('[att] Comps folder loaded')
-    else
-        print('[att] Failed to list files in Comps directory.')
     end
 end
 
