@@ -119,7 +119,6 @@ local state = {
     saReminderIntervals  = {},
     saAnnounced2Min      = false,
     saAnnounced1Min      = false,
-    saAnnounced30Sec     = false,
     
     scanNextLetter       = nil,
     
@@ -176,15 +175,7 @@ local function update_suggestions()
 end
 
 local function get_sa_flags()
-    local is_sa = state.g_SAMode
-    local is_late = false
-    if is_sa and state.selfAttendanceStart then
-        local elapsed = os.time() - state.selfAttendanceStart
-        if state.saTimerDuration - elapsed <= 30 then
-            is_late = true
-        end
-    end
-    return is_sa, is_late
+    return state.g_SAMode
 end
 
 local function get_search_area(eventName)
@@ -400,7 +391,6 @@ ashita.events.register('command', 'att_command_cb', function(e)
         state.saTimerDuration = constants.DEFAULT_SA_DURATION
         state.saAnnounced2Min = false
         state.saAnnounced1Min = false
-        state.saAnnounced30Sec = false
         -- (Ideally load from satimers.txt here, skipping file io for brevity, use defaults)
         
         attendance.build_credit_roster(state.pendingEventName)
@@ -447,12 +437,12 @@ ashita.events.register('command', 'att_command_cb', function(e)
         return
     else
         -- Fallback OR Skipped Search: Immediate Gather
-        local is_sa, is_late = get_sa_flags()
+        local is_sa = get_sa_flags()
         if lsMode then
-            attendance.gather_zone(state.pendingEventName, is_sa, is_late)
+            attendance.gather_zone(state.pendingEventName, is_sa)
         else
             -- attendance.gather_alliance(state.pendingEventName) -- Removed
-            attendance.gather_zone(state.pendingEventName, is_sa, is_late)
+            attendance.gather_zone(state.pendingEventName, is_sa)
         end
         
         if writeMode then
@@ -529,8 +519,7 @@ ashita.events.register('packet_in', 'att_packet_in', function(e)
          
          -- Add new
          local zid = memory.get_current_zone_id()
-         local _, is_late = get_sa_flags()
-         attendance.add_entry(char, 0, 0, zid, nil, is_late)
+         attendance.add_entry(char, 0, 0, zid, nil)
          attendance.sort()
     end
 end)
@@ -554,8 +543,8 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
 
     -- Pending Sea Scan
     if state.pendingSeaScan and os.clock() >= state.pendingSeaScan.fireAt then
-        local is_sa, is_late = get_sa_flags()
-        attendance.gather_zone(state.pendingEventName, is_sa, is_late)
+        local is_sa = get_sa_flags()
+        attendance.gather_zone(state.pendingEventName, is_sa)
         state.pendingSeaScan = nil
     end
     -- Pending Gather (Normal /att flow)
@@ -567,8 +556,8 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
         -- Gather
         -- Gather
         -- attendance.gather_alliance(ev) -- Removed
-        local is_sa, is_late = get_sa_flags()
-        attendance.gather_zone(ev, is_sa, is_late)     -- Then scan zone/search results
+        local is_sa = get_sa_flags()
+        attendance.gather_zone(ev, is_sa)     -- Then scan zone/search results
         
         -- Handle Write if requested
         if state.pendingGather.writeMode then
@@ -618,7 +607,7 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
                 end
             end
             local missingStr = #missing > 0 and table.concat(missing, ', ') or 'None'
-            AshitaCore:GetChatManager():QueueCommand(1, ls_prefix() .. string.format(messages.SA_REMAINING_2MIN, missingStr))
+            AshitaCore:GetChatManager():QueueCommand(1, ls_prefix() .. string.format(messages.SA_MISSING, missingStr))
             state.saAnnounced2Min = true
         end
 
@@ -631,22 +620,8 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
                 end
             end
             local missingStr = #missing > 0 and table.concat(missing, ', ') or 'None'
-            AshitaCore:GetChatManager():QueueCommand(1, ls_prefix() .. string.format(messages.SA_REMAINING_1MIN, missingStr))
+            AshitaCore:GetChatManager():QueueCommand(1, ls_prefix() .. string.format(messages.SA_MISSING, missingStr))
             state.saAnnounced1Min = true
-        end
-
-        -- 30 seconds left announcement (30 seconds remaining)
-        if remaining <= 30 and not state.saAnnounced30Sec then
-            local missing = {}
-            for _, row in ipairs(attendance.data) do
-                if row.name:match('^X ') then
-                    table.insert(missing, row.name:sub(3))
-                    row.late = true
-                end
-            end
-            local missingStr = #missing > 0 and table.concat(missing, ', ') or 'None'
-            AshitaCore:GetChatManager():QueueCommand(1, ls_prefix() .. string.format(messages.SA_REMAINING_30SEC, missingStr))
-            state.saAnnounced30Sec = true
         end
 
         -- Complete

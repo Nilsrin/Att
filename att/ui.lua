@@ -37,15 +37,7 @@ local resources = require('resources')
 local filterPtr = { '' }
 
 local function get_sa_flags(state)
-    local is_sa = state.g_SAMode
-    local is_late = false
-    if is_sa and state.selfAttendanceStart then
-        local elapsed = os.time() - state.selfAttendanceStart
-        if state.saTimerDuration - elapsed <= 30 then
-            is_late = true
-        end
-    end
-    return is_sa, is_late
+    return state.g_SAMode
 end
 
 function ui.draw_attendance_window(is_open, att_module, state, callbacks)
@@ -58,12 +50,7 @@ function ui.draw_attendance_window(is_open, att_module, state, callbacks)
     if isOpen then
 
         if state.g_SAMode and state.selfAttendanceStart then
-            local elapsed   = os.time() - state.selfAttendanceStart
-            local remaining = state.saTimerDuration - elapsed
-            if remaining < 0 then remaining = 0 end
-            local mins = (remaining - (remaining % 60)) / 60
-            local secs = (remaining % 60)
-            imgui.Text(string.format('Time until auto-submit: %02d:%02d', mins, secs))
+            imgui.Text('Self-Attendance Active')
             imgui.Separator()
         end
 
@@ -91,21 +78,11 @@ function ui.draw_attendance_window(is_open, att_module, state, callbacks)
         imgui.SameLine()
         imgui.Text('  |  ')
         imgui.SameLine()
-        
-        -- Late checkbox
-        local latePtr = { state.attendForceLate }
-        if imgui.Checkbox('Force Late', latePtr) then
-            state.attendForceLate = latePtr[1]
-        end
-        
-        imgui.SameLine()
-        imgui.Text('  |  ')
-        imgui.SameLine()
 
-        local is_sa, is_late = get_sa_flags(state)
+        local is_sa = get_sa_flags(state)
         if imgui.Button('Gather Zone') then
             att_module.clear()
-            att_module.gather_zone(state.pendingEventName, is_sa, is_late)
+            att_module.gather_zone(state.pendingEventName, is_sa)
         end
         imgui.SameLine()
         
@@ -144,7 +121,7 @@ function ui.draw_attendance_window(is_open, att_module, state, callbacks)
                         table.remove(att_module.data, i)
                     else
                         imgui.SameLine()
-                        imgui.Text(string.format('%s (%s | %s/%s)', r.name, r.late and 'Late' or 'Present', r.jobsMain or '?', r.jobsSub or '?'))
+                        imgui.Text(string.format('%s (%s/%s)', r.name, r.jobsMain or '?', r.jobsSub or '?'))
                         i = i + 1
                     end
                 else
@@ -158,17 +135,12 @@ function ui.draw_attendance_window(is_open, att_module, state, callbacks)
 
         -- Present
         draw_section('Present', function(r)
-            return not r.name:match('^X ') and not r.late
+            return not r.name:match('^X ')
         end)
 
-        -- Late
-        draw_section('Late', function(r)
-            return r.late == true
-        end)
-
-        -- Pending (only show if not late and starts with X)
+        -- Pending (only show if starts with X)
         draw_section('Pending', function(r)
-            return r.name:match('^X ') and not r.late
+            return r.name:match('^X ')
         end)
 
         imgui.EndChild()

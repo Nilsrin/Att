@@ -50,7 +50,7 @@ function attendance.sort()
     end)
 end
 
-function attendance.add_entry(name, mj_id, sj_id, zid, force_time, late)
+function attendance.add_entry(name, mj_id, sj_id, zid, force_time)
     local zname = resources.attZoneList[zid] or 'UnknownZone'
     local jobsMain = resources.attJobList[mj_id] or 'NONE'
     local jobsSub  = resources.attJobList[sj_id] or 'NONE'
@@ -61,12 +61,11 @@ function attendance.add_entry(name, mj_id, sj_id, zid, force_time, late)
         jobsSub  = jobsSub,
         zone     = zname,
         zid      = zid,
-        time     = force_time or os.date('%H:%M:%S'),
-        late     = late
+        time     = force_time or os.date('%H:%M:%S')
     })
 end
 
-function attendance.gather_zone(eventName, is_sa, is_late)
+function attendance.gather_zone(eventName, is_sa)
     local entries = memory.scan_zone_list()
     local seen = {}
     for _, row in ipairs(attendance.data) do
@@ -88,7 +87,7 @@ function attendance.gather_zone(eventName, is_sa, is_late)
             if is_sa then
                 entry_name = 'X ' .. name
             end
-            attendance.add_entry(entry_name, info.mj, info.sj, info.zid, nil, is_late)
+            attendance.add_entry(entry_name, info.mj, info.sj, info.zid)
             seen[key] = true
             added = added + 1
         end
@@ -178,10 +177,10 @@ function attendance.write_file(addon_path, mode, eventName)
     end
 
     local count = 0
-    -- Write Present (confirmed, not late)
+    -- Write Present (confirmed)
     for _, row in ipairs(attendance.data) do
         local is_pending = row.name:match('^X ')
-        if not is_pending and not row.late then
+        if not is_pending then
             f:write(string.format(
                 '%s,%s,%s,%s,%s,%s\n',
                 row.name,
@@ -192,33 +191,6 @@ function attendance.write_file(addon_path, mode, eventName)
                 eventName
             ))
             count = count + 1
-        end
-    end
-
-    -- Write Late (both confirmed and unconfirmed)
-    local has_late = false
-    for _, row in ipairs(attendance.data) do
-        if row.late then
-            has_late = true
-            break
-        end
-    end
-
-    if has_late then
-        f:write('[Late]\n')
-        for _, row in ipairs(attendance.data) do
-            if row.late then
-                f:write(string.format(
-                    '%s,%s,%s,%s,%s,%s\n',
-                    row.name,
-                    row.jobsMain,
-                    os.date('%m/%d/%Y'),
-                    os.date('%H:%M:%S'),
-                    row.zone,
-                    eventName
-                ))
-                count = count + 1
-            end
         end
     end
 
