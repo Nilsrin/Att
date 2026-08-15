@@ -7,6 +7,9 @@ Aspidochelone,Valley_of_Sorrows,sorrowvall
 Jormungand,Uleguerand_Range,uleguerand
 Tiamat,Attohwa_Chasm,attohwacsm
 Vrtra,King_Ranperres_Tomb,ranpstomb
+Khimaira,Caedarva_Mire,caedarva
+Hydra,Wajaom_Woodlands,wajaom
+Cerberus,Mount_Zhayolm,mtzhayolm
 
 -- NMS,
 Shikigami Weapon,RoMaeve,romaeve

@@ -21,6 +21,12 @@ Tiamat,Tiamat
 Tia,Tiamat
 vrtra,Vrtra
 Vrtra,Vrtra
+Cerb,Cerberus
+cerb,Cerberus
+Khim,Khimaira
+khim,Khimaira
+Hydra,Hydra
+hydra,Hydra
 ka,King Arthro
 Ka,King Arthro
 kv,King Vinegarroon

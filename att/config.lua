@@ -3,7 +3,8 @@ return {
 ["defaultLS2"] = false,
 ["selfAttestEvents"] = {
 ["Tiamat"] = true,
-["Vrtra"] = true,
-["Jormungand"] = true
+["Hydra"] = true,
+["Cerberus"] = true,
+["Khimaira"] = true
 }
 }
