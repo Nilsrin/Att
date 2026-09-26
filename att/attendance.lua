@@ -44,8 +44,8 @@ end
 
 function attendance.sort()
     table.sort(attendance.data, function(a, b)
-        local an = (a.name or ''):gsub('^X%s+', ''):lower()
-        local bn = (b.name or ''):gsub('^X%s+', ''):lower()
+        local an = (a.name or ''):gsub('^[X%?]%s*', ''):lower()
+        local bn = (b.name or ''):gsub('^[X%?]%s*', ''):lower()
         return an < bn
     end)
 end
@@ -69,7 +69,7 @@ function attendance.gather_zone(eventName, is_sa)
     local entries = memory.scan_zone_list()
     local seen = {}
     for _, row in ipairs(attendance.data) do
-        seen[row.name:gsub('^X%s+', ''):lower()] = true
+        seen[row.name:gsub('^[X%?]%s*', ''):lower()] = true
     end
 
     local added = 0
@@ -108,13 +108,204 @@ function attendance.build_credit_roster(eventName)
                 jobsMain = resources.attJobList[info.mj] or 'NONE',
                 jobsSub  = resources.attJobList[info.sj] or 'NONE',
                 zone     = resources.attZoneList[info.zid] or 'UnknownZone',
-                zid      = info.zid
+                zid      = info.zid,
+                mj       = info.mj,
+                sj       = info.sj
             }
             added = added + 1
         end
     end
     print(string.format('[att] credit roster: %d eligible', added))
     return added
+end
+
+function attendance.confirm_entry(target)
+    if type(target) == 'number' then
+        local row = attendance.data[target]
+        if row and (row.name:match('^X ') or row.name:match('^%? ')) then
+            row.name = row.name:gsub('^[X%?]%s*', '')
+            row.time = os.date('%H:%M:%S')
+            attendance.sort()
+            return true
+        end
+    elseif type(target) == 'string' then
+        local searchName = target:gsub('^[X%?]%s*', ''):lower()
+        for _, row in ipairs(attendance.data) do
+            local cleanName = row.name:gsub('^[X%?]%s*', ''):lower()
+            if cleanName == searchName and (row.name:match('^X ') or row.name:match('^%? ')) then
+                row.name = row.name:gsub('^[X%?]%s*', '')
+                row.time = os.date('%H:%M:%S')
+                attendance.sort()
+                return true
+            end
+        end
+    end
+    return false
+end
+
+function attendance.confirm_all_pending()
+    local count = 0
+    for _, row in ipairs(attendance.data) do
+        if row.name:match('^X ') then
+            row.name = row.name:gsub('^[X%?]%s*', '')
+            row.time = os.date('%H:%M:%S')
+            count = count + 1
+        end
+    end
+    if count > 0 then
+        attendance.sort()
+    end
+    return count
+end
+
+function attendance.approve_all_unlisted()
+    local count = 0
+    for _, row in ipairs(attendance.data) do
+        if row.name:match('^%? ') then
+            row.name = row.name:gsub('^[X%?]%s*', '')
+            row.time = os.date('%H:%M:%S')
+            count = count + 1
+        end
+    end
+    if count > 0 then
+        attendance.sort()
+    end
+    return count
+end
+
+function attendance.get_player_status(rawName)
+    if not rawName or rawName == '' then
+        return 'none', 'Invalid name'
+    end
+    local cleanName = helpers.trim(rawName):gsub('^[X%?]%s*', ''):lower()
+
+    for _, row in ipairs(attendance.data) do
+        local rClean = row.name:gsub('^[X%?]%s*', ''):lower()
+        if rClean == cleanName then
+            if row.name:match('^X ') then
+                return 'not_checked_in', 'Not checked in', row.time
+            elseif row.name:match('^%? ') then
+                return 'pending_approval', 'Pending approval', row.time
+            else
+                return 'checked_in', 'Checked in', row.time
+            end
+        end
+    end
+
+    return 'not_checked_in', 'Not checked in', nil
+end
+
+function attendance.handle_checkin(rawName)
+    if not rawName or rawName == '' then return false end
+    local cleanName = helpers.trim(rawName):gsub('^[X%?]%s*', '')
+    cleanName = cleanName:sub(1,1):upper() .. cleanName:sub(2):lower()
+
+    for _, row in ipairs(attendance.data) do
+        local rClean = row.name:gsub('^[X%?]%s*', '')
+        if rClean:lower() == cleanName:lower() then
+            if row.name:match('^X ') then
+                row.name = rClean
+                row.time = os.date('%H:%M:%S')
+                attendance.sort()
+                print(string.format('[att] Checked in: %s', rClean))
+                return true, 'confirmed'
+            elseif row.name:match('^%? ') then
+                return false, 'already_unlisted'
+            else
+                return false, 'already_present'
+            end
+        end
+    end
+
+    -- Not in list -> add to unlisted awaiting approval
+    local mj, sj, zid = 0, 0, memory.get_current_zone_id()
+    if attendance.zoneRoster and attendance.zoneRoster[cleanName] then
+        local rInfo = attendance.zoneRoster[cleanName]
+        mj = rInfo.mj or mj
+        sj = rInfo.sj or sj
+        zid = rInfo.zid or zid
+    end
+
+    local entries = memory.scan_zone_list()
+    for eName, eInfo in pairs(entries) do
+        if eName:lower() == cleanName:lower() then
+            mj = eInfo.mj or mj
+            sj = eInfo.sj or sj
+            zid = eInfo.zid or zid
+            cleanName = eName
+            break
+        end
+    end
+
+    local zname = resources.attZoneList[zid] or 'UnknownZone'
+    local jobsMain = resources.attJobList[mj] or 'NONE'
+    local jobsSub  = resources.attJobList[sj] or 'NONE'
+
+    table.insert(attendance.data, {
+        name     = '? ' .. cleanName,
+        jobsMain = jobsMain,
+        jobsSub  = jobsSub,
+        zone     = zname,
+        zid      = zid,
+        time     = os.date('%H:%M:%S')
+    })
+    attendance.sort()
+    print(string.format('[att] Unlisted check-in from "%s" added to Awaiting Approval.', cleanName))
+    return true, 'unlisted_added'
+end
+
+function attendance.manual_add_player(rawName)
+    if not rawName or rawName == '' then
+        return false, 'Name is empty'
+    end
+
+    local cleanName = helpers.trim(rawName)
+    cleanName = cleanName:gsub('^[X%?]%s*', '')
+    if not helpers.is_plausible_name(cleanName) then
+        return false, 'Invalid character name'
+    end
+
+    -- Format casing (e.g. Nils, Bobsmith)
+    cleanName = cleanName:sub(1,1):upper() .. cleanName:sub(2):lower()
+
+    -- Check if player already exists in attendance.data
+    for _, row in ipairs(attendance.data) do
+        local rClean = row.name:gsub('^[X%?]%s*', '')
+        if rClean:lower() == cleanName:lower() then
+            if row.name:match('^[X%?]') then
+                row.name = rClean
+                row.time = os.date('%H:%M:%S')
+                attendance.sort()
+                return true, 'Approved and added player'
+            else
+                return false, 'Player is already present'
+            end
+        end
+    end
+
+    -- Query memory or zone roster to resolve job and zone info
+    local mj, sj, zid = 0, 0, memory.get_current_zone_id()
+    if attendance.zoneRoster and attendance.zoneRoster[cleanName] then
+        local rInfo = attendance.zoneRoster[cleanName]
+        mj = rInfo.mj or mj
+        sj = rInfo.sj or sj
+        zid = rInfo.zid or zid
+    end
+
+    local entries = memory.scan_zone_list()
+    for eName, eInfo in pairs(entries) do
+        if eName:lower() == cleanName:lower() then
+            mj = eInfo.mj or mj
+            sj = eInfo.sj or sj
+            zid = eInfo.zid or zid
+            cleanName = eName -- exact casing from game memory
+            break
+        end
+    end
+
+    attendance.add_entry(cleanName, mj, sj, zid)
+    attendance.sort()
+    return true, 'Added player to attendance'
 end
 
 function attendance.populate_sa_start(eventName, hostName)
@@ -134,17 +325,14 @@ function attendance.populate_sa_start(eventName, hostName)
     if hostName and hostName ~= '' then
         local exists = false
         for _, row in ipairs(attendance.data) do
-            if row.name:gsub('^X ', ''):lower() == hostName:lower() then
+            if row.name:gsub('^[X%?]%s*', ''):lower() == hostName:lower() then
                 row.name = hostName -- remove X
                 exists = true
                 break
             end
         end
         if not exists then
-             -- Add host if not found (unexpected but possible if host is not in zone list yet?)
-             -- Try to find in zone roster again (safe check)
-             local hostInfo = attendance.zoneRoster[hostName] -- already in roster but maybe name casing?
-             -- If not found, just add with current zone/unknown jobs
+             local hostInfo = attendance.zoneRoster[hostName]
              if hostInfo then
                   attendance.add_entry(hostName, hostInfo.mj, hostInfo.sj, hostInfo.zid)
              else
@@ -179,8 +367,8 @@ function attendance.write_file(addon_path, mode, eventName)
     local count = 0
     -- Write Present (confirmed)
     for _, row in ipairs(attendance.data) do
-        local is_pending = row.name:match('^X ')
-        if not is_pending then
+        local is_unconfirmed = row.name:match('^[X%?]')
+        if not is_unconfirmed then
             f:write(string.format(
                 '%s,%s,%s,%s,%s,%s\n',
                 row.name,

@@ -229,21 +229,44 @@ ashita.events.register('command', 'att_command_cb', function(e)
 
     if #args == 1 then
         print(chat.header('att') .. 'Available Commands:')
-        print(' - /att pref : Toggles the preference settings window.')
+        print(' - /attend : Toggles the Main Menu (Events, Preferences, Tools).')
         print(' - /att here : Scans attendance for the current zone\'s event.')
         print(' - /att all : Scans all online linkshell members.')
+        print(' - /att add <name> : Manually adds or confirms a player.')
+        print(' - /att status [name] : Checks check-in status for a player.')
         print(' - /att [ls / ls2] [h / e] [sa] <event> : Scans a specific event.')
         print('      - ls / ls2: Linkshell 1 or 2 (Default: ' .. (state.defaultLS2 and 'LS2' or 'LS') .. ')')
         print('      - h / e: Auto-save to HNM (h) or Event (e) format')
         print('      - sa: Run in Self-Attendance check-in mode')
+        print(' - /att pref : Opens preferences in the Main Menu.')
         print(' - /att debug / debugmode : Developer tools.')
-        print(' - /attend : Toggles the attendance launcher dashboard GUI.')
+        return
+    end
+
+    -- /att status [name]
+    if #args >= 2 and args[2]:lower() == 'status' then
+        local targetName = args[3]
+        if not targetName or targetName == '' then
+            local pm = AshitaCore:GetMemoryManager():GetParty()
+            targetName = pm and pm:GetMemberName(0) or ''
+        end
+        local statusCode, statusLabel = attendance.get_player_status(targetName)
+        print(chat.header('att') .. string.format('Status for %s: %s', targetName, statusLabel))
+        return
+    end
+
+    -- /att add <name>
+    if #args >= 3 and args[2]:lower() == 'add' then
+        local targetName = args[3]
+        local success, msg = attendance.manual_add_player(targetName)
+        print(chat.header('att') .. string.format('%s: %s', targetName, msg or (success and 'Added' or 'Failed')))
         return
     end
 
     -- /att pref
-    if #args == 2 and args[2]:lower() == 'pref' then
-        state.isPreferencesWindowOpen = not state.isPreferencesWindowOpen
+    if #args == 2 and (args[2]:lower() == 'pref' or args[2]:lower() == 'menu') then
+        state.isAttendLauncherOpen = not state.isAttendLauncherOpen
+        if state.isAttendLauncherOpen then update_suggestions() end
         return
     end
 
@@ -456,10 +479,12 @@ ashita.events.register('command', 'att_command_cb', function(e)
     end
 end)
 
--- /attend
+-- /attend or /attpref (Main Menu)
 ashita.events.register('command', 'att_attend_cmd', function(e)
     local args = e.command:args()
-    if #args == 0 or args[1]:lower() ~= '/attend' then return end
+    if #args == 0 then return end
+    local cmd = args[1]:lower()
+    if cmd ~= '/attend' and cmd ~= '/attpref' and cmd ~= '/attmenu' then return end
     e.blocked = true
     
     -- Toggle/Open logic
@@ -478,14 +503,15 @@ end)
 -- PACKET (SA)
 --------------------------------------------------------------------------------
 ashita.events.register('packet_in', 'att_packet_in', function(e)
-    if not state.g_SAMode or e.id ~= 0x017 then return end
+    if e.id ~= 0x017 then return end
     
+    local mode = struct.unpack('b', e.data_modified, 0x04 + 1)
     local char = struct.unpack('c15', e.data_modified, 0x08 + 1):gsub('%z+$', '')
     local raw  = struct.unpack('s',  e.data_modified, 0x17 + 1)
     local msg  = helpers.clean_str(raw):lower()
 
     if state.debugMode then
-        print(string.format('[att-pkt] 0x017 Name:"%s" Msg:"%s"', char, msg))
+        print(string.format('[att-pkt] 0x017 Mode:0x%02X Name:"%s" Msg:"%s"', mode, char, msg))
         -- Hex Dump First 64 bytes
         local hex = ''
         for i = 0, math.min(63, e.size - 1) do
@@ -495,32 +521,45 @@ ashita.events.register('packet_in', 'att_packet_in', function(e)
         print('[att-pkt] Dump: ' .. hex)
     end
 
-    for _, trig in ipairs(constants.CONFIRM_COMMANDS) do
-        if msg:match('^!' .. trig) then
-            if attendance.zoneRoster[char] then
-                -- Find row and remove X
-                for _, row in ipairs(attendance.data) do
-                    if row.name == ('X ' .. char) then
-                        row.name = char
-                        row.time = os.date('%H:%M:%S')
-                        attendance.sort()
-                        return
-                    end
-                end
+    -- Status query: !attstatus (ONLY detected on incoming tells, mode == 0x03)
+    if mode == 0x03 and msg:match('^!attstatus') then
+        local evName = (state.pendingEventName and state.pendingEventName ~= '') and state.pendingEventName or nil
+        local statusCode, statusLabel = attendance.get_player_status(char)
+        
+        local reply = ''
+        if statusCode == 'checked_in' then
+            if evName then
+                reply = string.format('[ATT] Status: Checked in for %s.', evName)
+            else
+                reply = '[ATT] Status: Checked in.'
+            end
+        elseif statusCode == 'pending_approval' then
+            if evName then
+                reply = string.format('[ATT] Status: Pending approval for %s.', evName)
+            else
+                reply = '[ATT] Status: Pending approval.'
+            end
+        else -- not_checked_in
+            if evName then
+                reply = string.format('[ATT] Status: Not checked in for %s. Type !here in linkshell to check in.', evName)
+            else
+                reply = '[ATT] Status: Not checked in. Type !here in linkshell to check in.'
             end
         end
+
+        AshitaCore:GetChatManager():QueueCommand(1, string.format('/t %s %s', char, reply))
+        print(string.format('[att] Status response sent to %s: %s', char, statusLabel))
+        return
     end
-    
-    if msg:match('^!addme') then
-         -- Check if exists
-         for _, row in ipairs(attendance.data) do
-             if row.name:gsub('^X ', ''):lower() == char:lower() then return end
-         end
-         
-         -- Add new
-         local zid = memory.get_current_zone_id()
-         attendance.add_entry(char, 0, 0, zid, nil)
-         attendance.sort()
+
+    -- SA mode check-in commands (!here, !present, etc.)
+    if not state.g_SAMode then return end
+
+    for _, trig in ipairs(constants.CONFIRM_COMMANDS) do
+        if msg:match('^!' .. trig) then
+            attendance.handle_checkin(char)
+            return
+        end
     end
 end)
 
