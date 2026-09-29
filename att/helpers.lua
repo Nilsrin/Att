@@ -73,6 +73,26 @@ function helpers.clamp_0_99(n)
     return n
 end
 
+function helpers.strip_prefix(name)
+    return (tostring(name or ''):gsub('^[X%?]%s+', ''))
+end
+
+function helpers.is_unconfirmed(name)
+    return tostring(name or ''):match('^[X%?]%s+') ~= nil
+end
+
+function helpers.is_pending(name)
+    return tostring(name or ''):match('^X%s+') ~= nil
+end
+
+function helpers.is_unlisted(name)
+    return tostring(name or ''):match('^%?%s+') ~= nil
+end
+
+function helpers.clean_name(name)
+    return helpers.strip_prefix(helpers.trim(name))
+end
+
 function helpers.get_next_letter(ch)
     if not ch or ch == '' then return 'A' end
     ch = tostring(ch):upper()
@@ -84,3 +104,4 @@ function helpers.get_next_letter(ch)
 end
 
 return helpers
+

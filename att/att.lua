@@ -1,7 +1,7 @@
 -- att.lua (Refactored)
 addon.name    = 'att'
 addon.author  = 'Nils'
-addon.version = '5.0.0'
+addon.version = '5.1.0'
 addon.desc    = 'Attendance manager'
 
 require('common')
@@ -507,6 +507,7 @@ ashita.events.register('packet_in', 'att_packet_in', function(e)
     
     local mode = struct.unpack('b', e.data_modified, 0x04 + 1)
     local char = struct.unpack('c15', e.data_modified, 0x08 + 1):gsub('%z+$', '')
+    char = helpers.clean_name(char)
     local raw  = struct.unpack('s',  e.data_modified, 0x17 + 1)
     local msg  = helpers.clean_str(raw):lower()
 
@@ -641,8 +642,8 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
         if remaining <= 120 and not state.saAnnounced2Min then
             local missing = {}
             for _, row in ipairs(attendance.data) do
-                if row.name:match('^X ') then
-                    table.insert(missing, row.name:sub(3))
+                if helpers.is_pending(row.name) then
+                    table.insert(missing, helpers.strip_prefix(row.name))
                 end
             end
             local missingStr = #missing > 0 and table.concat(missing, ', ') or 'None'
@@ -654,8 +655,8 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
         if remaining <= 60 and not state.saAnnounced1Min then
             local missing = {}
             for _, row in ipairs(attendance.data) do
-                if row.name:match('^X ') then
-                    table.insert(missing, row.name:sub(3))
+                if helpers.is_pending(row.name) then
+                    table.insert(missing, helpers.strip_prefix(row.name))
                 end
             end
             local missingStr = #missing > 0 and table.concat(missing, ', ') or 'None'
@@ -689,7 +690,7 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
             
             local filtered = {}
             for _, r in ipairs(attendance.data) do
-                local cleanName = r.name:gsub('^X%s+', ''):lower()
+                local cleanName = helpers.strip_prefix(r.name):lower()
                 if partyNames[cleanName] then
                     table.insert(filtered, r)
                 end
@@ -707,7 +708,7 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
         on_show_pending = function()
              local p = {}
              for _, r in ipairs(attendance.data) do
-                 if r.name:match('^X ') then table.insert(p, r.name:sub(3)) end
+                 if helpers.is_pending(r.name) then table.insert(p, helpers.strip_prefix(r.name)) end
              end
              if #p > 0 then
                  AshitaCore:GetChatManager():QueueCommand(1, ls_prefix() .. string.format(messages.PENDING_LIST, table.concat(p, ', ')))

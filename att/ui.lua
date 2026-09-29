@@ -108,7 +108,8 @@ function ui.draw_attendance_window(is_open, att_module, state, callbacks)
         if not state.scanNextLetter then
              -- Simple heuristic if none set
              local last = att_module.data[#att_module.data]
-             local ch = (last and last.name) and last.name:match('^X?%s*(%a)') or 'A'
+             local cleanLast = last and helpers.strip_prefix(last.name)
+             local ch = (cleanLast and cleanLast ~= '') and cleanLast:match('^(%a)') or 'A'
              state.scanNextLetter = ch:upper()
          end
 
@@ -152,9 +153,9 @@ function ui.draw_attendance_window(is_open, att_module, state, callbacks)
         local pending_count = 0
         local unlisted_count = 0
         for _, r in ipairs(att_module.data) do
-            if r.name:match('^X ') then
+            if helpers.is_pending(r.name) then
                 pending_count = pending_count + 1
-            elseif r.name:match('^%? ') then
+            elseif helpers.is_unlisted(r.name) then
                 unlisted_count = unlisted_count + 1
             else
                 present_count = present_count + 1
@@ -190,7 +191,7 @@ function ui.draw_attendance_window(is_open, att_module, state, callbacks)
             local i = 1
             while i <= #att_module.data do
                 local r = att_module.data[i]
-                if not r.name:match('^[X%?]') then
+                if not helpers.is_unconfirmed(r.name) then
                     if imgui.Button('Remove##present_' .. i) then
                         table.remove(att_module.data, i)
                     else
@@ -227,7 +228,7 @@ function ui.draw_attendance_window(is_open, att_module, state, callbacks)
             local i = 1
             while i <= #att_module.data do
                 local r = att_module.data[i]
-                if r.name:match('^X ') then
+                if helpers.is_pending(r.name) then
                     if imgui.Button('Check In##pending_' .. i) then
                         att_module.confirm_entry(i)
                     else
@@ -236,7 +237,7 @@ function ui.draw_attendance_window(is_open, att_module, state, callbacks)
                             table.remove(att_module.data, i)
                         else
                             imgui.SameLine()
-                            local displayName = r.name:gsub('^X%s+', '')
+                            local displayName = helpers.strip_prefix(r.name)
                             imgui.TextColored({1.0, 0.65, 0.4, 1.0}, displayName)
                             imgui.SameLine()
                             imgui.TextDisabled(string.format('(%s/%s)', r.jobsMain or '?', r.jobsSub or '?'))
@@ -266,7 +267,7 @@ function ui.draw_attendance_window(is_open, att_module, state, callbacks)
             local i = 1
             while i <= #att_module.data do
                 local r = att_module.data[i]
-                if r.name:match('^%? ') then
+                if helpers.is_unlisted(r.name) then
                     if imgui.Button('Approve##unlisted_' .. i) then
                         att_module.confirm_entry(i)
                     else
@@ -275,7 +276,7 @@ function ui.draw_attendance_window(is_open, att_module, state, callbacks)
                             table.remove(att_module.data, i)
                         else
                             imgui.SameLine()
-                            local displayName = r.name:gsub('^%?%s*', '')
+                            local displayName = helpers.strip_prefix(r.name)
                             imgui.TextColored({0.4, 0.8, 1.0, 1.0}, displayName)
                             imgui.SameLine()
                             imgui.TextDisabled(string.format('(%s/%s)', r.jobsMain or '?', r.jobsSub or '?'))

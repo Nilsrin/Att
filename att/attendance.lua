@@ -44,8 +44,8 @@ end
 
 function attendance.sort()
     table.sort(attendance.data, function(a, b)
-        local an = (a.name or ''):gsub('^[X%?]%s*', ''):lower()
-        local bn = (b.name or ''):gsub('^[X%?]%s*', ''):lower()
+        local an = helpers.strip_prefix(a.name or ''):lower()
+        local bn = helpers.strip_prefix(b.name or ''):lower()
         return an < bn
     end)
 end
@@ -69,7 +69,7 @@ function attendance.gather_zone(eventName, is_sa)
     local entries = memory.scan_zone_list()
     local seen = {}
     for _, row in ipairs(attendance.data) do
-        seen[row.name:gsub('^[X%?]%s*', ''):lower()] = true
+        seen[helpers.strip_prefix(row.name):lower()] = true
     end
 
     local added = 0
@@ -122,18 +122,18 @@ end
 function attendance.confirm_entry(target)
     if type(target) == 'number' then
         local row = attendance.data[target]
-        if row and (row.name:match('^X ') or row.name:match('^%? ')) then
-            row.name = row.name:gsub('^[X%?]%s*', '')
+        if row and helpers.is_unconfirmed(row.name) then
+            row.name = helpers.strip_prefix(row.name)
             row.time = os.date('%H:%M:%S')
             attendance.sort()
             return true
         end
     elseif type(target) == 'string' then
-        local searchName = target:gsub('^[X%?]%s*', ''):lower()
+        local searchName = helpers.clean_name(target):lower()
         for _, row in ipairs(attendance.data) do
-            local cleanName = row.name:gsub('^[X%?]%s*', ''):lower()
-            if cleanName == searchName and (row.name:match('^X ') or row.name:match('^%? ')) then
-                row.name = row.name:gsub('^[X%?]%s*', '')
+            local cleanName = helpers.strip_prefix(row.name):lower()
+            if cleanName == searchName and helpers.is_unconfirmed(row.name) then
+                row.name = helpers.strip_prefix(row.name)
                 row.time = os.date('%H:%M:%S')
                 attendance.sort()
                 return true
@@ -146,8 +146,8 @@ end
 function attendance.confirm_all_pending()
     local count = 0
     for _, row in ipairs(attendance.data) do
-        if row.name:match('^X ') then
-            row.name = row.name:gsub('^[X%?]%s*', '')
+        if helpers.is_pending(row.name) then
+            row.name = helpers.strip_prefix(row.name)
             row.time = os.date('%H:%M:%S')
             count = count + 1
         end
@@ -161,8 +161,8 @@ end
 function attendance.approve_all_unlisted()
     local count = 0
     for _, row in ipairs(attendance.data) do
-        if row.name:match('^%? ') then
-            row.name = row.name:gsub('^[X%?]%s*', '')
+        if helpers.is_unlisted(row.name) then
+            row.name = helpers.strip_prefix(row.name)
             row.time = os.date('%H:%M:%S')
             count = count + 1
         end
@@ -177,14 +177,14 @@ function attendance.get_player_status(rawName)
     if not rawName or rawName == '' then
         return 'none', 'Invalid name'
     end
-    local cleanName = helpers.trim(rawName):gsub('^[X%?]%s*', ''):lower()
+    local cleanName = helpers.clean_name(rawName):lower()
 
     for _, row in ipairs(attendance.data) do
-        local rClean = row.name:gsub('^[X%?]%s*', ''):lower()
+        local rClean = helpers.strip_prefix(row.name):lower()
         if rClean == cleanName then
-            if row.name:match('^X ') then
+            if helpers.is_pending(row.name) then
                 return 'not_checked_in', 'Not checked in', row.time
-            elseif row.name:match('^%? ') then
+            elseif helpers.is_unlisted(row.name) then
                 return 'pending_approval', 'Pending approval', row.time
             else
                 return 'checked_in', 'Checked in', row.time
@@ -197,19 +197,22 @@ end
 
 function attendance.handle_checkin(rawName)
     if not rawName or rawName == '' then return false end
-    local cleanName = helpers.trim(rawName):gsub('^[X%?]%s*', '')
+    local cleanName = helpers.clean_name(rawName)
+    if not helpers.is_plausible_name(cleanName) then return false end
+
     cleanName = cleanName:sub(1,1):upper() .. cleanName:sub(2):lower()
+    local targetLower = cleanName:lower()
 
     for _, row in ipairs(attendance.data) do
-        local rClean = row.name:gsub('^[X%?]%s*', '')
-        if rClean:lower() == cleanName:lower() then
-            if row.name:match('^X ') then
+        local rClean = helpers.strip_prefix(row.name)
+        if rClean:lower() == targetLower then
+            if helpers.is_pending(row.name) then
                 row.name = rClean
                 row.time = os.date('%H:%M:%S')
                 attendance.sort()
                 print(string.format('[att] Checked in: %s', rClean))
                 return true, 'confirmed'
-            elseif row.name:match('^%? ') then
+            elseif helpers.is_unlisted(row.name) then
                 return false, 'already_unlisted'
             else
                 return false, 'already_present'
@@ -228,7 +231,7 @@ function attendance.handle_checkin(rawName)
 
     local entries = memory.scan_zone_list()
     for eName, eInfo in pairs(entries) do
-        if eName:lower() == cleanName:lower() then
+        if eName:lower() == targetLower then
             mj = eInfo.mj or mj
             sj = eInfo.sj or sj
             zid = eInfo.zid or zid
@@ -259,20 +262,20 @@ function attendance.manual_add_player(rawName)
         return false, 'Name is empty'
     end
 
-    local cleanName = helpers.trim(rawName)
-    cleanName = cleanName:gsub('^[X%?]%s*', '')
+    local cleanName = helpers.clean_name(rawName)
     if not helpers.is_plausible_name(cleanName) then
         return false, 'Invalid character name'
     end
 
     -- Format casing (e.g. Nils, Bobsmith)
     cleanName = cleanName:sub(1,1):upper() .. cleanName:sub(2):lower()
+    local targetLower = cleanName:lower()
 
     -- Check if player already exists in attendance.data
     for _, row in ipairs(attendance.data) do
-        local rClean = row.name:gsub('^[X%?]%s*', '')
-        if rClean:lower() == cleanName:lower() then
-            if row.name:match('^[X%?]') then
+        local rClean = helpers.strip_prefix(row.name)
+        if rClean:lower() == targetLower then
+            if helpers.is_unconfirmed(row.name) then
                 row.name = rClean
                 row.time = os.date('%H:%M:%S')
                 attendance.sort()
@@ -294,7 +297,7 @@ function attendance.manual_add_player(rawName)
 
     local entries = memory.scan_zone_list()
     for eName, eInfo in pairs(entries) do
-        if eName:lower() == cleanName:lower() then
+        if eName:lower() == targetLower then
             mj = eInfo.mj or mj
             sj = eInfo.sj or sj
             zid = eInfo.zid or zid
@@ -324,8 +327,9 @@ function attendance.populate_sa_start(eventName, hostName)
     -- Mark host as present
     if hostName and hostName ~= '' then
         local exists = false
+        local hostLower = hostName:lower()
         for _, row in ipairs(attendance.data) do
-            if row.name:gsub('^[X%?]%s*', ''):lower() == hostName:lower() then
+            if helpers.strip_prefix(row.name):lower() == hostLower then
                 row.name = hostName -- remove X
                 exists = true
                 break
@@ -367,7 +371,7 @@ function attendance.write_file(addon_path, mode, eventName)
     local count = 0
     -- Write Present (confirmed)
     for _, row in ipairs(attendance.data) do
-        local is_unconfirmed = row.name:match('^[X%?]')
+        local is_unconfirmed = helpers.is_unconfirmed(row.name)
         if not is_unconfirmed then
             f:write(string.format(
                 '%s,%s,%s,%s,%s,%s\n',
