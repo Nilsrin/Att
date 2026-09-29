@@ -1,7 +1,7 @@
 -- att.lua (Refactored)
 addon.name    = 'att'
 addon.author  = 'Nils'
-addon.version = '5.1.0'
+addon.version = '5.1.1'
 addon.desc    = 'Attendance manager'
 
 require('common')
