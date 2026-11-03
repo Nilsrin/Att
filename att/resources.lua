@@ -70,6 +70,8 @@ function resources.load(addon_path)
 
     -- creditnames.txt
     local currentCategory = nil
+    local seenCategoryEvents = {}
+    local seenUncategorized = {}
     
     -- Track loaded count
     resources.loadedInfo = {
@@ -82,6 +84,7 @@ function resources.load(addon_path)
     local function ensure_category(cat)
         if not resources.attendCategories[cat] then
             resources.attendCategories[cat] = {}
+            seenCategoryEvents[cat] = {}
             table.insert(resources.attendCategoriesOrder, cat)
         end
     end
@@ -169,9 +172,15 @@ function resources.load(addon_path)
 
                     if ev ~= 'Current Zone' then
                         if currentCategory then
-                            table.insert(resources.attendCategories[currentCategory], ev)
+                            if not seenCategoryEvents[currentCategory][ev] then
+                                seenCategoryEvents[currentCategory][ev] = true
+                                table.insert(resources.attendCategories[currentCategory], ev)
+                            end
                         else
-                            table.insert(resources.uncategorizedEvents, ev)
+                            if not seenUncategorized[ev] then
+                                seenUncategorized[ev] = true
+                                table.insert(resources.uncategorizedEvents, ev)
+                            end
                         end
                     end
                 end

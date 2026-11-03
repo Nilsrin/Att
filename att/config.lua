@@ -1,11 +1,20 @@
 return {
-["autoPopout"] = true,
+["popoutHideTitle"] = true,
 ["defaultLS2"] = false,
+["autoPopout"] = true,
 ["selfAttestEvents"] = {
-["King Arthro"] = true,
 ["Tiamat"] = true,
+["Vrtra"] = true,
 ["Hydra"] = true,
+["Khimaira"] = true,
 ["Cerberus"] = true,
-["Khimaira"] = true
-}
+["Jormungand"] = true
+},
+["popoutRounding"] = 4,
+["popoutWidth"] = 220,
+["popoutBtnHeight"] = 42,
+["uiScale"] = 1.35,
+["popoutTheme"] = "Midnight",
+["popoutLockPosition"] = false,
+["popoutHideBg"] = true
 }

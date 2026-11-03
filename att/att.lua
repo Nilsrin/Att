@@ -1,12 +1,16 @@
 -- att.lua (Refactored)
 addon.name    = 'att'
 addon.author  = 'Nils'
-addon.version = '5.1.1'
+addon.version = '5.1.0'
 addon.desc    = 'Attendance manager'
 
 require('common')
 
 local imgui      = require('imgui')
+local io_init    = imgui.GetIO()
+if io_init then
+    io_init.MouseDrawCursor = false
+end
 
 -- Localized modules/globals for performance optimization
 local os         = os
@@ -57,10 +61,26 @@ local function load_config()
             local loaded = {
                 autoPopout = true,
                 selfAttestEvents = {},
-                defaultLS2 = false
+                defaultLS2 = false,
+                uiScale = 1.0,
+                popoutHideTitle = false,
+                popoutHideBg = false,
+                popoutLockPosition = false,
+                popoutTheme = 'Slate',
+                popoutRounding = 5.0,
+                popoutBtnHeight = 42,
+                popoutWidth = 220
             }
             if type(res.autoPopout) == 'boolean' then loaded.autoPopout = res.autoPopout end
             if type(res.defaultLS2) == 'boolean' then loaded.defaultLS2 = res.defaultLS2 end
+            if type(res.uiScale) == 'number' then loaded.uiScale = res.uiScale end
+            if type(res.popoutHideTitle) == 'boolean' then loaded.popoutHideTitle = res.popoutHideTitle end
+            if type(res.popoutHideBg) == 'boolean' then loaded.popoutHideBg = res.popoutHideBg end
+            if type(res.popoutLockPosition) == 'boolean' then loaded.popoutLockPosition = res.popoutLockPosition end
+            if type(res.popoutTheme) == 'string' then loaded.popoutTheme = res.popoutTheme end
+            if type(res.popoutRounding) == 'number' then loaded.popoutRounding = res.popoutRounding end
+            if type(res.popoutBtnHeight) == 'number' then loaded.popoutBtnHeight = res.popoutBtnHeight end
+            if type(res.popoutWidth) == 'number' then loaded.popoutWidth = res.popoutWidth end
             if type(res.selfAttestEvents) == 'table' then
                 for k, v in pairs(res.selfAttestEvents) do
                     loaded.selfAttestEvents[k] = v
@@ -72,7 +92,15 @@ local function load_config()
     return {
         autoPopout = true,
         selfAttestEvents = {},
-        defaultLS2 = false
+        defaultLS2 = false,
+        uiScale = 1.0,
+        popoutHideTitle = false,
+        popoutHideBg = false,
+        popoutLockPosition = false,
+        popoutTheme = 'Slate',
+        popoutRounding = 5.0,
+        popoutBtnHeight = 42,
+        popoutWidth = 220
     }
 end
 
@@ -102,6 +130,16 @@ local state = {
     autoPopout             = config.autoPopout,
     selfAttestEvents       = config.selfAttestEvents,
     defaultLS2             = config.defaultLS2,
+    uiScale                = config.uiScale or 1.0,
+    requestedTab           = nil,
+
+    popoutHideTitle        = (config.popoutHideTitle == true),
+    popoutHideBg           = (config.popoutHideBg == true),
+    popoutLockPosition     = (config.popoutLockPosition == true),
+    popoutTheme            = config.popoutTheme or 'Slate',
+    popoutRounding         = config.popoutRounding or 5.0,
+    popoutBtnHeight        = config.popoutBtnHeight or 42,
+    popoutWidth            = config.popoutWidth or 220,
 
     pendingEventName     = nil,
     pendingFilePath      = nil,
@@ -121,6 +159,10 @@ local state = {
     saAnnounced1Min      = false,
     
     scanNextLetter       = nil,
+    isScanningLetter     = false,
+    isScanningAll        = false,
+    abortScanAll         = false,
+    isRefreshing         = false,
     
     suggestions          = { evs={}, zone='' },
     lastDetectedZid      = nil,
@@ -133,6 +175,10 @@ local state = {
 --------------------------------------------------------------------------------
 ashita.events.register('load', 'att_load_cb', function()
     resources.load(addon.path)
+    local io = imgui.GetIO()
+    if io then
+        io.MouseDrawCursor = false
+    end
 end)
 
 --------------------------------------------------------------------------------
@@ -179,10 +225,31 @@ local function get_sa_flags()
 end
 
 local function get_search_area(eventName)
-    if resources.attSearchArea[eventName] then
+    -- 1. Check if the player is currently in one of the credit zones for eventName
+    local curZid = memory.get_current_zone_id()
+    local curZoneName = resources.attZoneList[curZid]
+    if curZoneName then
+        local normCurZone = helpers.norm(curZoneName)
+        if resources.attCreditZoneIds[eventName] and resources.attCreditZoneIds[eventName][curZid] then
+            if resources.zoneToSearchArea[curZoneName] then
+                return resources.zoneToSearchArea[curZoneName]
+            end
+        end
+        if resources.attCreditNames[eventName] then
+            for _, z in ipairs(resources.attCreditNames[eventName]) do
+                if helpers.norm(z) == normCurZone and resources.zoneToSearchArea[z] then
+                    return resources.zoneToSearchArea[z]
+                end
+            end
+        end
+    end
+
+    -- 2. Explicit event search area if defined
+    if resources.attSearchArea[eventName] and resources.attSearchArea[eventName] ~= '' then
         return resources.attSearchArea[eventName]
     end
     
+    -- 3. Fallback: first credit zone or zone name
     local zoneName = eventName
     if resources.attCreditNames[eventName] and resources.attCreditNames[eventName][1] then
         zoneName = resources.attCreditNames[eventName][1]
@@ -190,7 +257,6 @@ local function get_search_area(eventName)
     
     local searchArea = resources.zoneToSearchArea[zoneName]
     if not searchArea then
-        -- Fallback: take the first part of the zone name before any underscore/space/dash
         searchArea = zoneName:gsub('%-', '_'):match('^[^%s_]+') or zoneName
     end
     return searchArea
@@ -203,6 +269,10 @@ local function queue_attend_launch(eventName)
         print(string.format('[att] No search area found for "%s".', eventName))
         return
     end
+
+    attendance.clear()
+    state.pendingEventName = eventName
+    state.isAttendanceWindowOpen = true
 
     local lsSearch = state.attendUseLS2 and 'linkshell2' or 'linkshell'
     AshitaCore:GetChatManager():QueueCommand(1, string.format('/sea %s %s', area, lsSearch))
@@ -219,6 +289,109 @@ local function queue_attend_launch(eventName)
 end
 
 --------------------------------------------------------------------------------
+local function trigger_refresh()
+    if state.isScanningAll or state.isScanningLetter or state.isRefreshing then return end
+
+    local ev = state.pendingEventName
+    if not ev or ev == '' then
+        local curZid = memory.get_current_zone_id()
+        ev = state.suggestions.zone or resources.attZoneList[curZid] or 'Current Zone'
+        state.pendingEventName = ev
+    end
+
+    local area = get_search_area(ev)
+    if not area or area == '' then
+        local curZid = memory.get_current_zone_id()
+        local curZoneName = resources.attZoneList[curZid]
+        if curZoneName then
+            area = resources.zoneToSearchArea[curZoneName] or curZoneName:gsub('%-', '_'):match('^[^%s_]+')
+        end
+    end
+
+    local lsSearch = (state.g_LSMode == 'ls2' or state.attendUseLS2) and 'linkshell2' or 'linkshell'
+    local is_sa = get_sa_flags()
+
+    state.isRefreshing = true
+    state.isAttendanceWindowOpen = true
+
+    ashita.tasks.once(0, function()
+        -- 1. Close open search window with 3 escape presses
+        for i = 1, 3 do
+            AshitaCore:GetChatManager():QueueCommand(-1, '/sendkey escape down')
+            coroutine.sleep(0.06)
+            AshitaCore:GetChatManager():QueueCommand(-1, '/sendkey escape up')
+            coroutine.sleep(0.06)
+        end
+
+        -- 2. 1 second delay between escapes and new search
+        coroutine.sleep(1.0)
+
+        -- 3. Reopen search window for current event
+        if ev == 'Global Search' or area == 'all' then
+            AshitaCore:GetChatManager():QueueCommand(1, string.format('/sea all %s', lsSearch))
+        elseif area and area ~= '' then
+            AshitaCore:GetChatManager():QueueCommand(1, string.format('/sea %s %s', area, lsSearch))
+        else
+            print(string.format('[att] No search area found to refresh for "%s".', tostring(ev or 'Current Zone')))
+        end
+
+        -- 4. Wait for search results
+        local waitSec = tonumber(state.attendDelaySec) or 2
+        if waitSec < 2 then waitSec = 2 end
+        coroutine.sleep(waitSec)
+
+        -- 5. Update attendance from memory
+        attendance.gather_zone(ev, is_sa)
+
+        AshitaCore:GetChatManager():QueueCommand(-1, '/releasekeys')
+        state.isRefreshing = false
+        print(string.format('[att] Refreshed attendance for "%s".', tostring(ev)))
+    end)
+end
+
+--------------------------------------------------------------------------------
+local function trim_to_party()
+    local pm = AshitaCore:GetMemoryManager():GetParty()
+    if not pm then return 0, 0 end
+
+    local partyNames = {}
+    local activeCount = 0
+    for i = 0, 17 do
+        local isActive = true
+        if pm.GetMemberIsActive then
+            isActive = (pm:GetMemberIsActive(i) == 1)
+        end
+        if isActive then
+            local name = pm:GetMemberName(i)
+            if name and type(name) == 'string' then
+                name = helpers.trim(name)
+                if #name > 0 then
+                    partyNames[name:lower()] = true
+                    activeCount = activeCount + 1
+                end
+            end
+        end
+    end
+
+    if activeCount == 0 then
+        print(chat.header('att') .. 'No active party or alliance members found.')
+        return 0, 0
+    end
+
+    local beforeCount = #attendance.data
+    local filtered = {}
+    for _, r in ipairs(attendance.data) do
+        local cleanName = helpers.clean_name(r.name):lower()
+        if partyNames[cleanName] then
+            table.insert(filtered, r)
+        end
+    end
+    local removed = beforeCount - #filtered
+    attendance.data = filtered
+    print(chat.header('att') .. string.format('Trimmed attendance to %d party/alliance member(s) (removed %d).', #attendance.data, removed))
+    return #attendance.data, removed
+end
+
 -- COMMAND HANDLERS
 --------------------------------------------------------------------------------
 -- /att
@@ -232,6 +405,8 @@ ashita.events.register('command', 'att_command_cb', function(e)
         print(' - /attend : Toggles the Main Menu (Events, Preferences, Tools).')
         print(' - /att here : Scans attendance for the current zone\'s event.')
         print(' - /att all : Scans all online linkshell members.')
+        print(' - /att refresh : Refreshes attendance search for current event.')
+        print(' - /att party : Trims attendance to current party/alliance members.')
         print(' - /att add <name> : Manually adds or confirms a player.')
         print(' - /att status [name] : Checks check-in status for a player.')
         print(' - /att [ls / ls2] [h / e] [sa] <event> : Scans a specific event.')
@@ -239,6 +414,7 @@ ashita.events.register('command', 'att_command_cb', function(e)
         print('      - h / e: Auto-save to HNM (h) or Event (e) format')
         print('      - sa: Run in Self-Attendance check-in mode')
         print(' - /att pref : Opens preferences in the Main Menu.')
+        print(' - /att scale [value] : Gets or sets the UI scale (0.5 - 3.0).')
         print(' - /att debug / debugmode : Developer tools.')
         return
     end
@@ -265,8 +441,30 @@ ashita.events.register('command', 'att_command_cb', function(e)
 
     -- /att pref
     if #args == 2 and (args[2]:lower() == 'pref' or args[2]:lower() == 'menu') then
-        state.isAttendLauncherOpen = not state.isAttendLauncherOpen
-        if state.isAttendLauncherOpen then update_suggestions() end
+        state.isAttendLauncherOpen = true
+        if args[2]:lower() == 'pref' then
+            state.requestedTab = 'Preferences'
+        end
+        update_suggestions()
+        return
+    end
+
+    -- /att scale [value]
+    if #args >= 2 and (args[2]:lower() == 'scale' or args[2]:lower() == 'uiscale') then
+        if #args >= 3 then
+            local num = tonumber(args[3])
+            if num and num >= 0.5 and num <= 3.0 then
+                num = math.floor(num * 100 + 0.5) / 100
+                config.uiScale = num
+                save_config(config)
+                state.uiScale = num
+                print(chat.header('att') .. string.format('UI Scale set to %.2fx (%.0f%%).', num, num * 100))
+            else
+                print(chat.header('att') .. 'Invalid scale value. Specify a number between 0.5 and 3.0 (e.g. /att scale 1.25).')
+            end
+        else
+            print(chat.header('att') .. string.format('Current UI Scale: %.2fx (%.0f%%). Use /att scale <0.5-3.0> to change.', state.uiScale or 1.0, (state.uiScale or 1.0) * 100))
+        end
         return
     end
 
@@ -290,12 +488,26 @@ ashita.events.register('command', 'att_command_cb', function(e)
         local zid = memory.get_current_zone_id()
         local evs, _ = attendance.resolve_events_for_zone(zid)
         if evs and evs[1] then
+            state.isAttendanceWindowOpen = true
             AshitaCore:GetChatManager():QueueCommand(1, string.format('/att ls "%s"', evs[1]))
         else
             print('[att] No event found for current zone.')
         end
         return
     end
+
+    -- /att refresh
+    if #args == 2 and args[2]:lower() == 'refresh' then
+        trigger_refresh()
+        return
+    end
+
+    -- /att party / partyonly
+    if #args == 2 and (args[2]:lower() == 'party' or args[2]:lower() == 'partyonly') then
+        trim_to_party()
+        return
+    end
+
     
     -- /att memscan
     if #args == 2 and args[2]:lower() == 'memscan' then
@@ -364,7 +576,12 @@ ashita.events.register('command', 'att_command_cb', function(e)
     state.g_SAMode     = false
     state.selfAttendanceStart = nil
     state.scanNextLetter      = nil
+    state.isScanningLetter    = false
+    state.isScanningAll       = false
+    state.abortScanAll        = false
+    state.isRefreshing        = false
     state.pendingSeaScan      = nil
+    state.isAttendanceWindowOpen = true
 
     local lsMode, writeMode, saFlag = nil, nil, false
     local aliasParts = {}
@@ -455,8 +672,8 @@ ashita.events.register('command', 'att_command_cb', function(e)
             writeMode = writeMode  -- If set, will write file after gather
         }
         
-        -- DELAY WINDOW OPENING UNTIL GATHER COMPLETE
-        -- state.isAttendanceWindowOpen = true
+        -- Open window immediately so user sees results window pop up first
+        state.isAttendanceWindowOpen = true
         return
     else
         -- Fallback OR Skipped Search: Immediate Gather
@@ -487,6 +704,13 @@ ashita.events.register('command', 'att_attend_cmd', function(e)
     if cmd ~= '/attend' and cmd ~= '/attpref' and cmd ~= '/attmenu' then return end
     e.blocked = true
     
+    if cmd == '/attpref' then
+        state.isAttendLauncherOpen = true
+        state.requestedTab = 'Preferences'
+        update_suggestions()
+        return
+    end
+
     -- Toggle/Open logic
     if #args > 1 and args[2]:lower() == 'close' then
         state.isAttendLauncherOpen = false
@@ -568,6 +792,12 @@ end)
 -- D3D PRESENT
 --------------------------------------------------------------------------------
 ashita.events.register('d3d_present', 'att_present_cb', function()
+    -- Ensure Dear ImGui software cursor is disabled so native/hardware cursor is used
+    local io = imgui.GetIO()
+    if io and io.MouseDrawCursor then
+        io.MouseDrawCursor = false
+    end
+
     -- Pending Attend Launch
     if state.pendingAttend and os.clock() >= state.pendingAttend.fireAt then
         local lsFlag = state.pendingAttend.useLS2 and 'ls2' or 'ls'
@@ -677,25 +907,7 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
     -- CALLBACKS for UI
     local callbacks = {
         on_party_only = function()
-            local pm = AshitaCore:GetMemoryManager():GetParty()
-            if not pm then return end
-            
-            local partyNames = {}
-            for i = 0, 17 do
-                local name = pm:GetMemberName(i)
-                if name and type(name) == 'string' and #name > 0 then
-                    partyNames[name:lower()] = true
-                end
-            end
-            
-            local filtered = {}
-            for _, r in ipairs(attendance.data) do
-                local cleanName = helpers.strip_prefix(r.name):lower()
-                if partyNames[cleanName] then
-                    table.insert(filtered, r)
-                end
-            end
-            attendance.data = filtered
+            return trim_to_party()
         end,
         on_write = function(close)
             local _, msg = attendance.write_file(addon.path, state.selectedMode, state.pendingEventName)
@@ -719,18 +931,111 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
              attendance.build_credit_roster(state.pendingEventName)
              -- Logic to merge... (omitted detailed merge logic for now, just rebuilds roster)
         end,
+        on_refresh = function()
+             trigger_refresh()
+        end,
         on_launch_event = function(ev)
              queue_attend_launch(ev)
         end,
         on_update_zone = function() update_suggestions() end,
         on_scan_letter = function(letter)
+             if state.isScanningLetter or state.isScanningAll then return end
+
              local area = get_search_area(state.pendingEventName)
              if area and area ~= '' then
+                 state.isScanningLetter = true
                  local lsSearch = (state.g_LSMode == 'ls2') and 'linkshell2' or 'linkshell'
-                 AshitaCore:GetChatManager():QueueCommand(1, string.format('/sea %s %s %s', area, lsSearch, letter))
-                 
-                 state.pendingSeaScan = { fireAt = os.clock() + (state.attendDelaySec or 2) }
+
+                 -- Send 3 presses of the escape key before running the /sea search command
+                 ashita.tasks.once(0, function()
+                     for i = 1, 3 do
+                         AshitaCore:GetChatManager():QueueCommand(-1, '/sendkey escape down')
+                         coroutine.sleep(0.06)
+                         AshitaCore:GetChatManager():QueueCommand(-1, '/sendkey escape up')
+                         coroutine.sleep(0.06)
+                     end
+
+                     -- 1 second delay between escapes and the new search
+                     coroutine.sleep(1.0)
+
+                     AshitaCore:GetChatManager():QueueCommand(1, string.format('/sea %s %s %s', area, lsSearch, letter))
+                     state.pendingSeaScan = { fireAt = os.clock() + (state.attendDelaySec or 2) }
+                     state.isScanningLetter = false
+                 end)
              end
+        end,
+        on_scan_all = function()
+             if state.isScanningAll or state.isScanningLetter then return end
+
+             local area = get_search_area(state.pendingEventName)
+             if not area or area == '' then
+                 print(string.format('[att] No search area found for "%s".', tostring(state.pendingEventName)))
+                 return
+             end
+
+             state.isScanningAll = true
+             state.abortScanAll = false
+             local lsSearch = (state.g_LSMode == 'ls2') and 'linkshell2' or 'linkshell'
+             local is_sa = get_sa_flags()
+
+             local current = state.scanNextLetter
+             if not current or current == '' then
+                 local last = attendance.data[#attendance.data]
+                 local cleanLast = last and helpers.strip_prefix(last.name)
+                 local ch = (cleanLast and cleanLast ~= '') and cleanLast:match('^(%a)') or 'A'
+                 current = ch:upper()
+             end
+
+             ashita.tasks.once(0, function()
+                 while state.isScanningAll and not state.abortScanAll do
+                     state.scanNextLetter = current
+                     print(string.format('[att] Scan all: scanning letter %s (%s)...', current, area))
+
+                     -- 1. Three escape keypresses to close any open search window
+                     for i = 1, 3 do
+                         if state.abortScanAll then break end
+                         AshitaCore:GetChatManager():QueueCommand(-1, '/sendkey escape down')
+                         coroutine.sleep(0.06)
+                         AshitaCore:GetChatManager():QueueCommand(-1, '/sendkey escape up')
+                         coroutine.sleep(0.06)
+                     end
+                     if state.abortScanAll then break end
+
+                     -- 2. One second delay between escapes and new search
+                     coroutine.sleep(1.0)
+                     if state.abortScanAll then break end
+
+                     -- 3. Run the search
+                     AshitaCore:GetChatManager():QueueCommand(1, string.format('/sea %s %s %s', area, lsSearch, current))
+
+                     -- 4. Wait for search results
+                     local waitSec = tonumber(state.attendDelaySec) or 2
+                     if waitSec < 2 then waitSec = 2 end
+                     coroutine.sleep(waitSec)
+                     if state.abortScanAll then break end
+
+                     -- 5. Gather search results from memory
+                     attendance.gather_zone(state.pendingEventName, is_sa)
+
+                     -- 6. Advance to next letter; stop once wrapped back to A
+                     local nextLetter = helpers.get_next_letter(current)
+                     state.scanNextLetter = nextLetter
+                     if nextLetter == 'A' then
+                         print('[att] Scan all complete (wrapped back to A).')
+                         break
+                     end
+                     current = nextLetter
+                 end
+
+                 AshitaCore:GetChatManager():QueueCommand(-1, '/releasekeys')
+                 state.isScanningAll = false
+                 state.abortScanAll = false
+             end)
+        end,
+        on_stop_scan = function()
+             state.abortScanAll = true
+             AshitaCore:GetChatManager():QueueCommand(-1, '/releasekeys')
+             print('[att] Stopping scan all...')
         end,
         on_auto_popout_change = function(val)
              config.autoPopout = val
@@ -754,6 +1059,21 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
              state.defaultLS2 = val
              state.attendUseLS2 = val
              state.g_LSMode = val and 'ls2' or 'ls'
+        end,
+        on_ui_scale_change = function(val)
+             config.uiScale = val
+             save_config(config)
+             state.uiScale = val
+        end,
+        on_popout_config_change = function()
+             config.popoutHideTitle = state.popoutHideTitle
+             config.popoutHideBg = state.popoutHideBg
+             config.popoutLockPosition = state.popoutLockPosition
+             config.popoutTheme = state.popoutTheme
+             config.popoutRounding = state.popoutRounding
+             config.popoutBtnHeight = state.popoutBtnHeight
+             config.popoutWidth = state.popoutWidth
+             save_config(config)
         end
     }
 
@@ -770,13 +1090,14 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
         state.isPopoutOpen = ui.draw_popout(state.isPopoutOpen, state, callbacks)
     end
     
-    if state.isPreferencesWindowOpen then
+    if state.isPreferencesWindowOpen and not state.isAttendLauncherOpen then
         state.isPreferencesWindowOpen = ui.draw_preferences_window(state.isPreferencesWindowOpen, state, callbacks)
     end
     
     -- Debug window call removed
 
 end)
+
 
 ashita.events.register('command', 'att_global_tools', function(e)
     local args = e.command:args()
@@ -792,3 +1113,16 @@ ashita.events.register('command', 'att_global_tools', function(e)
         return
     end
 end)
+
+ashita.events.register('unload', 'att_unload_cb', function()
+    state.abortScanAll = true
+    state.isScanningAll = false
+    state.isScanningLetter = false
+    state.isRefreshing = false
+    AshitaCore:GetChatManager():QueueCommand(-1, '/releasekeys')
+    local io = imgui.GetIO()
+    if io then
+        io.MouseDrawCursor = false
+    end
+end)
+

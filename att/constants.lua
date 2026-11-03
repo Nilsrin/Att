@@ -9,6 +9,6 @@ constants.SJ_OFFSETS        = { 0x25, 0x21 }
 constants.NAME_LENGTHS      = { 16, 15 }
 
 constants.DEFAULT_SA_DURATION = 300
-constants.CONFIRM_COMMANDS    = { 'here', 'present', 'herebrother' }
+constants.CONFIRM_COMMANDS    = { 'here', 'present', 'herebrother', 'addme' }
 
 return constants

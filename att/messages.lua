@@ -15,7 +15,7 @@ local DEC_EV  = STAR_HOLLOW .. STAR_SOLID .. STAR_HOLLOW
 
 -- When Self-Attendance starts (/att sa <event>)
 -- Params: Event Name
-messages.SA_START = DEC_EV .. " Self-attendance started for %s. Type !here or !present to confirm your attendance " .. DEC_EV
+messages.SA_START = DEC_EV .. " Self-attendance started for %s. Type !here, !present, or !addme to confirm your attendance " .. DEC_EV
 
 -- When attendance is written to file (HNM mode)
 -- Params: Event Name
